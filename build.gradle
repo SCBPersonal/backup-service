@@ -16,7 +16,7 @@ configurations {
 
 targetCompatibility = JavaVersion.VERSION_21
 archivesBaseName = 'backup-orchestrator-service'
-version = '0.0.1-SNAPSHOT'
+version = '0.0.2'
 
 
 repositories {
