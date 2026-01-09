@@ -1,0 +1,115 @@
+# Source: backup-orchestrator-service-helm/templates/backup-orchestrator-service-configmap.yaml
+# Copyright 2024 HDFC BANK
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-orchestrator-service-configmap
+data:
+  SERVER_PORT: {{ .Values.service.port | quote }}
+  APPLICATION_NAME: {{ .Values.envVariables.APPLICATION_NAME | quote }}
+  APP_ENV: {{ .Values.envVariables.APP_ENV | quote }}
+  SPRING_PROFILES_ACTIVE: {{ .Values.envVariables.SPRING_PROFILES_ACTIVE | quote }}
+  JAVA_OPTS: {{ .Values.envVariables.JAVA_OPTS | quote }}
+
+  # YBA Configuration
+  YBA_API_TOKEN: {{ .Values.envVariables.YBA_API_TOKEN | quote }}
+  YBA_UNIVERSE_UUID: {{ .Values.envVariables.YBA_UNIVERSE_UUID | quote }}
+  YBA_STORAGE_CONFIG_UUID: {{ .Values.envVariables.YBA_STORAGE_CONFIG_UUID | quote }}
+  YBA_CUSTOMER_UUID: {{ .Values.envVariables.YBA_CUSTOMER_UUID | quote }}
+
+  # Database Configuration
+  DATASOURCE_URL: {{ .Values.envVariables.DATASOURCE_URL | quote }}
+  DATASOURCE_USERNAME: {{ .Values.envVariables.DATASOURCE_USERNAME | quote }}
+  DATASOURCE_DRIVER_CLASS_NAME: {{ .Values.envVariables.DATASOURCE_DRIVER_CLASS_NAME | quote }}
+  DATASOURCE_HIKARI_POOL_SIZE: {{ .Values.envVariables.DATASOURCE_HIKARI_POOL_SIZE | quote }}
+  DATASOURCE_SSL_ENABLE: {{ .Values.envVariables.DATASOURCE_SSL_ENABLE | quote }}
+  DATASOURCE_SSL_MODE: {{ .Values.envVariables.DATASOURCE_SSL_MODE | quote }}
+
+  # Secret Store Configuration
+  SECRET_STORE_NAME: {{ .Values.envVariables.SECRET_STORE_NAME | quote }}
+  DB_PASSWORD_SECRET_NAME: {{ .Values.envVariables.DB_PASSWORD_SECRET_NAME | quote }}
+  DB_SECRET_KEY: {{ .Values.envVariables.DB_SECRET_KEY | quote }}
+  DB_SECRET_PASS: {{ .Values.envVariables.DB_SECRET_PASS | quote }}
+
+  # Monitoring Configuration
+  METRICS_ENDPOINT: {{ .Values.envVariables.METRICS_ENDPOINT | quote }}
+  TRACE_ENDPOINT: {{ .Values.envVariables.TRACE_ENDPOINT | quote }}
+
+  # Application YAML Configuration
+  application.yml: |
+    server:
+      port: {{ .Values.service.port }}
+
+    spring:
+      main:
+        banner-mode: "off"
+
+    # -------------------------
+    # BASE CONFIGURATION (Common to all)
+    # -------------------------
+    app:
+      env: {{ .Values.envVariables.APP_ENV }}     # dev | uat | prod
+
+    # -------------------------
+    # PROFILE CONFIGURATION
+    # -------------------------
+    ---
+    spring:
+      config:
+        activate:
+          on-expression: "'${app.env}' == '{{ .Values.envVariables.APP_ENV }}'"
+
+      datasource:
+        url: ${DATASOURCE_URL}
+        username: ${DATASOURCE_USERNAME}
+        password: ${DATASOURCE_PASSWORD}
+        driver-class-name: ${DATASOURCE_DRIVER_CLASS_NAME:com.yugabyte.Driver}
+        hikari:
+          maximum-pool-size: ${DATASOURCE_HIKARI_POOL_SIZE:5}
+          minimum-idle: ${HIKARI_MINIMUM_IDLE:1}
+          data-source-properties:
+            ssl: ${DATASOURCE_SSL_ENABLE:false}
+            sslmode: ${DATASOURCE_SSL_MODE:disable}
+            sslfactory: com.hdfcbank.epricing.batch.core.lib.util.CustomSslConnectionFactory
+
+    yba:
+      dbMappingJson: |
+        {
+          "HWA_EPR_DB_BACKUP_FULL": {
+            "fullBackupUrl": "${YBA_FULL_BACKUP_URL:}",
+            "storageConfigUuid": "${YBA_STORAGE_CONFIG_UUID:}",
+            "apiToken": "${YBA_API_TOKEN:}",
+            "universeUuid": "${YBA_UNIVERSE_UUID:}",
+            "backupType": "PGSQL_TABLE_TYPE",
+            "backupCategoryType": "full_backup",
+            "dbName" : "${YBA_DB_NAME:hbl_gcp_uat_epr_db}",
+            "expiryMs": 86400000
+          },
+          "HWA_EPR_DB_BACKUP_INCRE": {
+            "incrementalBackupUrl": "${YBA_INCREMENTAL_BACKUP_URL:}",
+            "lastBackupUrl": "${YBA_LAST_BACKUP_URL:}",
+            "storageConfigUuid": "${YBA_STORAGE_CONFIG_UUID:}",
+            "apiToken": "${YBA_API_TOKEN:}",
+            "universeUuid": "${YBA_UNIVERSE_UUID:}",
+            "backupType": "PGSQL_TABLE_TYPE",
+            "dbName" : "${YBA_DB_NAME:hbl_gcp_uat_epr_db}",
+            "backupCategoryType":"incremental_backup",
+            "expiryMs": 86400000
+          },
+          "UAM_DB_BACKUP": {
+            "fullBackupUrl": "${UAM_FULL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups}",
+            "incrementalBackupUrl": "${UAM_INCREMENTAL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups/incremental}",
+            "lastBackupUrl": "${UAM_LAST_BACKUP_URL:https://db2/api/v1/customers/cust222/backups?limit=1&direction=DESC}",
+            "storageConfigUuid": "${UAM_STORAGE_CONFIG_UUID:store222}",
+            "backupType": "PGSQL_TABLE_TYPE",
+            "dbName" : "${UAM_DB_NAME:hbl_gcp_uat_epr_db}",
+            "expiryMs": 172800000
+          }
+        }
+
+    data:
+      db-schedule-backup-insert:
+        query: INSERT INTO epricing.batch_db_schedule_event_tracker(batch_id, backup_job_categorycode, backup_status, backup_type, business_date, start_time) VALUES(:batch_id, :batchCategory, :backupStatus, :backupType, :businessDate, :start_time);
+      update-schedule-backup:
+        query: UPDATE batch_db_schedule_event_tracker SET backup_status =:status,end_time = now(),backup_response=:ydbResponse WHERE batch_id=:batch_id AND business_date=:businessDate;

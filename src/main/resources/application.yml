@@ -1,0 +1,110 @@
+server.port: 8989
+
+spring:
+  main:
+    banner-mode: "off"
+
+# -------------------------
+# BASE CONFIGURATION (Common to all)
+# -------------------------
+app:
+  env: ${APP_ENV:dev}     # dev | uat | prod
+
+# -------------------------
+# DEV PROFILE CONFIGURATION
+# -------------------------
+---
+spring:
+  config:
+    activate:
+      on-expression: "'${app.env}' == 'dev'"
+
+  datasource:
+    url: ${DATASOURCE_URL}
+    username: ${DATASOURCE_USERNAME}
+    password: ${DATASOURCE_PASSWORD}
+    driver-class-name: ${DATASOURCE_DRIVER_CLASS_NAME:com.yugabyte.Driver}
+    hikari:
+      maximum-pool-size: ${DATASOURCE_HIKARI_POOL_SIZE:5}
+      minimum-idle: ${HIKARI_MINIMUM_IDLE:1}
+      data-source-properties:
+        ssl: ${DATASOURCE_SSL_ENABLE:false}
+        sslmode: ${DATASOURCE_SSL_MODE:disable}
+        sslfactory: com.hdfcbank.epricing.batch.core.lib.util.CustomSslConnectionFactory
+
+#yba:
+#  dbMappingJson: |
+#    {
+#      "HWA_EPR_DB_BACKUP_FULL": {
+#        "fullBackupUrl": "${YBA_FULL_BACKUP_URL:}",
+#        "storageConfigUuid": "${YBA_STORAGE_CONFIG_UUID:}",
+#        "apiToken": "${YBA_API_TOKEN:}",
+#        "universeUuid": "${YBA_UNIVERSE_UUID:}",
+#        "backupType": "PGSQL_TABLE_TYPE",
+#        "backupCategoryType": "full_backup",
+#        "dbName" : "${YBA_DB_NAME:hbl_gcp_uat_epr_db}",
+#        "expiryMs": 86400000
+#      },
+#      "HWA_EPR_DB_BACKUP_INCRE": {
+#        "incrementalBackupUrl": "${YBA_INCREMENTAL_BACKUP_URL:}",
+#        "lastBackupUrl": "${YBA_LAST_BACKUP_URL:}",
+#        "storageConfigUuid": "${YBA_STORAGE_CONFIG_UUID:}",
+#        "apiToken": "${YBA_API_TOKEN:}",
+#        "universeUuid": "${YBA_UNIVERSE_UUID:}",
+#        "backupType": "PGSQL_TABLE_TYPE",
+#        "dbName" : "${YBA_DB_NAME:hbl_gcp_uat_epr_db}",
+#        "backupCategoryType":"incremental_backup",
+#        "expiryMs": 86400000
+#      },
+#      "UAM_DB_BACKUP": {
+#        "fullBackupUrl": "${UAM_FULL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups}",
+#        "incrementalBackupUrl": "${UAM_INCREMENTAL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups/incremental}",
+#        "lastBackupUrl": "${UAM_LAST_BACKUP_URL:https://db2/api/v1/customers/cust222/backups?limit=1&direction=DESC}",
+#        "storageConfigUuid": "${UAM_STORAGE_CONFIG_UUID:store222}",
+#        "backupType": "PGSQL_TABLE_TYPE",
+#        "dbName" : "${UAM_DB_NAME:hbl_gcp_uat_epr_db}",
+#        "expiryMs": 172800000
+#      }
+#    }
+
+yba:
+  databases:
+    db1:
+      full-backup-url: ${YBA_FULL_BACKUP_URL:}
+      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID:}
+      api-token: ${YBA_API_TOKEN:}
+      universe-uuid: ${YBA_UNIVERSE_UUID:}
+      backup-type: PGSQL_TABLE_TYPE
+      backup-category-type: full_backup
+      db-name: ${YBA_DB_NAME:hbl_gcp_uat_epr_db}
+      expiry-ms: 86400000
+
+    db2:
+      full-backup-url: ${YBA_FULL_BACKUP_URL_2:}
+      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:}
+      last-backup-url: ${YBA_LAST_BACKUP_URL_2:}
+      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID_2:}
+      api-token: ${YBA_API_TOKEN_2:}
+      universe-uuid: ${YBA_UNIVERSE_UUID_2:}
+      backup-type: PGSQL_TABLE_TYPE
+      backup-category-type: incremental_backup
+      db-name: ${YBA_DB_NAME_2:hbl_gcp_uat_epr_db_2}
+      expiry-ms: 86400000
+
+    uam-db:
+      full-backup-url: ${UAM_FULL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups}
+      incremental-backup-url: ${UAM_INCREMENTAL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups/incremental}
+      last-backup-url: ${UAM_LAST_BACKUP_URL:https://db2/api/v1/customers/cust222/backups?limit=1&direction=DESC}
+      storage-config-uuid: ${UAM_STORAGE_CONFIG_UUID:store222}
+      api-token: ${UAM_API_TOKEN:}
+      universe-uuid: ${UAM_UNIVERSE_UUID:}
+      backup-type: PGSQL_TABLE_TYPE
+      backup-category-type: full_backup
+      db-name: ${UAM_DB_NAME:hbl_gcp_uat_epr_db}
+      expiry-ms: 172800000
+
+data:
+  db-schedule-backup-insert:
+    query: INSERT INTO epricing.batch_db_schedule_event_tracker(batch_id, backup_job_categorycode, backup_status, backup_type, business_date, start_time) VALUES(:batch_id, :batchCategory, :backupStatus, :backupType, :businessDate, :start_time);
+  update-schedule-backup:
+    query: UPDATE batch_db_schedule_event_tracker SET backup_status =:status,end_time = now(),backup_response=:ydbResponse WHERE batch_id=:batch_id AND business_date=:businessDate;

@@ -1,0 +1,139 @@
+# Default values for backup-orchestrator-service.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This will set the replicaset count
+replicaCount: 1
+
+# This sets the container image
+image:
+  repository: <DOCKER_REPOSITORY>/<IMAGE_PREFIX>/backup-orchestrator-service
+  # This sets the pull policy for images.
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: <IMAGE_TAG>
+
+# This is for the secretes for pulling an image from a private repository
+imagePullSecrets:
+  - name: "docker-registry-secret"
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+#This section builds out the service account
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  name: <SERVICE_ACCOUNT_NAME>
+
+# This is for setting Kubernetes Annotations to a Pod.
+podAnnotations: {
+  dapr.io/enabled: 'true',
+  dapr.io/app-id: 'backuporchestrator',
+  dapr.io/app-port: '8989',
+  dapr.io/sidecar-readiness-probe-threshold: '40',
+  dapr.io/sidecar-image: 'enterprisequay.hbctxdom.com/shikhar_epricing/daprd:1.15.4-hdfc-v3',
+  dapr.io/graceful-shutdown-seconds: '300',
+  dapr.io/sidecar-cpu-request: '200m',
+  dapr.io/sidecar-cpu-limit: '500m',
+  dapr.io/sidecar-memory-limit: '1Gi',
+  dapr.io/sidecar-memory-request: '500Mi',
+  dapr.io/log-level: 'debug',
+  dapr.io/log-as-json: 'true'
+}
+
+# This is for setting Kubernetes Labels to a Pod.
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+# This is for setting up a service
+service:
+  # This sets the service type
+  type: ClusterIP
+  # This sets the ports
+  port: 8989
+
+envFrom:
+  backupOrchestratorService: backup-orchestrator-service-configmap
+
+envVariables:
+  APPLICATION_NAME: "backup-orchestrator-service"
+  SERVER_PORT: "8989"
+  APP_ENV: <APP_ENV>
+  SPRING_PROFILES_ACTIVE: "kubernetes"
+  JAVA_OPTS: "-Xmx1024m -Xms512m"
+
+  # YBA Configuration Environment Variables
+  YBA_API_TOKEN: <YBA_API_TOKEN>
+  YBA_UNIVERSE_UUID: <YBA_UNIVERSE_UUID>
+  YBA_STORAGE_CONFIG_UUID: <YBA_STORAGE_CONFIG_UUID>
+  YBA_CUSTOMER_UUID: <YBA_CUSTOMER_UUID>
+
+  # Database Configuration
+  DATASOURCE_URL: <DATASOURCE_URL>
+  DATASOURCE_USERNAME: <DATASOURCE_USERNAME>
+  DATASOURCE_DRIVER_CLASS_NAME: "com.yugabyte.Driver"
+  DATASOURCE_HIKARI_POOL_SIZE: <DATASOURCE_HIKARI_POOL_SIZE>
+  DATASOURCE_SSL_ENABLE: <DATASOURCE_SSL_ENABLE>
+  DATASOURCE_SSL_MODE: <DATASOURCE_SSL_MODE>
+
+  # Secret Store Configuration
+  SECRET_STORE_NAME: <SECRET_STORE_NAME>
+  DB_PASSWORD_SECRET_NAME: <DB_PASSWORD_SECRET_NAME>
+  DB_SECRET_KEY: <DB_SECRET_KEY>
+  DB_SECRET_PASS: <DB_SECRET_PASS>
+
+  # Monitoring Configuration
+  METRICS_ENDPOINT: <METRICS_ENDPOINT>
+  TRACE_ENDPOINT: <TRACE_ENDPOINT>
+
+# This block is for setting up the ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: backup-orchestrator.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+otel:
+  exporters:
+    googlecloud:
+      userAgent: "otel-collector"
+
+resources: {}
+
+#This section is for setting up autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+gcp:
+  secretStore:
+    enabled: true
+    projectId: <GCP_PROJECT_ID>
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-orchestrator-otel-config
+  namespace: hwa
+data:
+  otel-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+
+    exporters:
+      googlecloud:
+        project: {{ .Values.gcp.secretStore.projectId }}
+        user_agent: {{ .Values.otel.exporters.googlecloud.userAgent }}
+
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:8080"
+      pprof: {}
+      zpages: {}
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 65
+        spike_limit_percentage: 20
+      batch: {}
+      resourcedetection:
+        detectors: [gcp]
+        timeout: 10s
+
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, resourcedetection]
+          exporters: [googlecloud]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [googlecloud]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [googlecloud]

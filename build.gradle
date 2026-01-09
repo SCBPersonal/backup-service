@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+    id 'org.springframework.boot' version '3.5.3'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+targetCompatibility = JavaVersion.VERSION_21
+archivesBaseName = 'backup-orchestrator-service'
+version = '0.0.1-SNAPSHOT'
+
+
+repositories {
+
+    mavenLocal()
+    mavenCentral()
+
+
+}
+
+dependencyManagement {
+    imports {
+        //mavenBom 'com.hdfcbank:epricing-platform-bom:latest.release'
+        mavenBom "org.junit:junit-bom:latest.release"
+
+    }
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.core:jackson-core'
+    //implementation 'com.yugabyte:jdbc-yugabytedb'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'com.jayway.jsonpath:json-path'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    implementation('com.scb:epricing-batch-core-lib:4.0.1')
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
