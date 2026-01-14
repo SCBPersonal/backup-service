@@ -3,7 +3,7 @@ server.port: 8989
 spring:
   main:
     banner-mode: "off"
-
+##########
 # -------------------------
 # BASE CONFIGURATION (Common to all)
 # -------------------------
