@@ -1,7 +1,7 @@
 package com.scb.backup.exception;
 
 import com.scb.backup.utils.AppConstants;
-import com.scb.epricing.batch.core.lib.model.BatchStartResponse;
+import com.hdfcbank.epricing.batch.core.lib.model.BatchStartResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

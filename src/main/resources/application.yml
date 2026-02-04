@@ -108,3 +108,7 @@ data:
     query: INSERT INTO epricing.batch_db_schedule_event_tracker(batch_id, backup_job_categorycode, backup_status, backup_type, business_date, start_time) VALUES(:batch_id, :batchCategory, :backupStatus, :backupType, :businessDate, :start_time);
   update-schedule-backup:
     query: UPDATE batch_db_schedule_event_tracker SET backup_status =:status,end_time = now(),backup_response=:ydbResponse WHERE batch_id=:batch_id AND business_date=:businessDate;
+  insert-base-backup-uuid:
+    query: INSERT INTO epricing.base_backup_uuid_tracker(category_code, base_backup_uuid, backup_month, updated_at) VALUES(:categoryCode, :baseBackupUuid, :backupMonth, CURRENT_TIMESTAMP) ON CONFLICT (category_code, backup_month) DO UPDATE SET base_backup_uuid = EXCLUDED.base_backup_uuid, updated_at = CURRENT_TIMESTAMP;
+  get-base-backup-uuid:
+    query: SELECT base_backup_uuid FROM epricing.base_backup_uuid_tracker WHERE category_code = :categoryCode AND backup_month = :backupMonth ORDER BY updated_at DESC LIMIT 1;
