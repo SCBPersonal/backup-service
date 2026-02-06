@@ -73,11 +73,27 @@ public class WebClientConfig {
                 .build();
     }
 
+    /**
+     * Logs outgoing HTTP requests at DEBUG level.
+     *
+     * This filter logs the HTTP method and URL of each request before it's sent.
+     *
+     * @param request ClientRequest to be logged
+     * @return Mono containing the original request
+     */
     private Mono<ClientRequest> logRequest(ClientRequest request) {
         log.debug("Request: {} {}", request.method(), request.url());
         return Mono.just(request);
     }
 
+    /**
+     * Logs incoming HTTP responses at DEBUG level.
+     *
+     * This filter logs the HTTP status code of each response received.
+     *
+     * @param response ClientResponse to be logged
+     * @return Mono containing the original response
+     */
     private Mono<ClientResponse> logResponse(ClientResponse response) {
         log.debug("Response Status: {}", response.statusCode());
         return Mono.just(response);
