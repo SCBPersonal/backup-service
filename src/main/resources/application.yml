@@ -3,7 +3,7 @@ server.port: 8989
 spring:
   main:
     banner-mode: "off"
-##########
+
 # -------------------------
 # BASE CONFIGURATION (Common to all)
 # -------------------------
@@ -104,7 +104,32 @@ yba:
       expiry-ms: 172800000
 
 data:
-  db-schedule-backup-insert:
-    query: INSERT INTO epricing.batch_db_schedule_event_tracker(batch_id, backup_job_categorycode, backup_status, backup_type, business_date, start_time) VALUES(:batch_id, :batchCategory, :backupStatus, :backupType, :businessDate, :start_time);
-  update-schedule-backup:
-    query: UPDATE batch_db_schedule_event_tracker SET backup_status =:status,end_time = now(),backup_response=:ydbResponse WHERE batch_id=:batch_id AND business_date=:businessDate;
+  # Full Backup Table Queries
+  insert-full-backup:
+    query: INSERT INTO epricing.full_backup_tracker(batch_id, category_code, business_date, backup_month, backup_status, full_backup_response, task_uuid, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupMonth, :backupStatus, :fullBackupResponse, :taskUuid, :startTime) ON CONFLICT (category_code, backup_month) DO UPDATE SET batch_id = EXCLUDED.batch_id, business_date = EXCLUDED.business_date, backup_status = EXCLUDED.backup_status, full_backup_response = EXCLUDED.full_backup_response, task_uuid = EXCLUDED.task_uuid, start_time = EXCLUDED.start_time, updated_at = CURRENT_TIMESTAMP;
+  update-full-backup-with-base-uuid:
+    query: UPDATE epricing.full_backup_tracker SET base_backup_uuid = :baseBackupUuid, backup_status = :backupStatus, end_time = :endTime, updated_at = CURRENT_TIMESTAMP WHERE category_code = :categoryCode AND backup_month = :backupMonth;
+  update-full-backup-status:
+    query: UPDATE epricing.full_backup_tracker SET backup_status = :backupStatus, error_message = :errorMessage, end_time = :endTime, updated_at = CURRENT_TIMESTAMP WHERE category_code = :categoryCode AND backup_month = :backupMonth;
+  get-full-backup-base-uuid:
+    query: SELECT base_backup_uuid FROM epricing.full_backup_tracker WHERE category_code = :categoryCode AND backup_month = :backupMonth AND backup_status = 'SUCCESS' ORDER BY updated_at DESC LIMIT 1;
+  get-full-backup-by-task-uuid:
+    query: SELECT * FROM epricing.full_backup_tracker WHERE task_uuid = :taskUuid LIMIT 1;
+  get-pending-full-backups:
+    query: SELECT * FROM epricing.full_backup_tracker WHERE backup_status = 'IN_PROGRESS' ORDER BY start_time ASC;
+
+  # Incremental Backup Table Queries
+  insert-incremental-backup:
+    query: INSERT INTO epricing.incremental_backup_tracker(batch_id, category_code, business_date, backup_month, base_backup_uuid, backup_status, incremental_backup_response, task_uuid, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupMonth, :baseBackupUuid, :backupStatus, :incrementalBackupResponse, :taskUuid, :startTime);
+  update-incremental-backup-status:
+    query: UPDATE epricing.incremental_backup_tracker SET backup_status = :backupStatus, error_message = :errorMessage, end_time = :endTime, updated_at = CURRENT_TIMESTAMP WHERE batch_id = :batchId AND business_date = :businessDate;
+
+# Backup Poller Configuration
+backup:
+  poller:
+    enabled: ${BACKUP_POLLER_ENABLED:true}
+    initial-delay-ms: ${BACKUP_POLLER_INITIAL_DELAY:5000}  # 5 seconds
+    polling-interval-ms: ${BACKUP_POLLER_INTERVAL:30000}  # 30 seconds
+    max-poll-attempts: ${BACKUP_POLLER_MAX_ATTEMPTS:120}  # 120 attempts = 1 hour with 30s interval
+    thread-pool-size: ${BACKUP_POLLER_THREAD_POOL:5}
+    job-completion-check-url: ${YBA_JOB_STATUS_URL:/api/v1/customers/{customerUuid}/tasks/{taskUuid}}

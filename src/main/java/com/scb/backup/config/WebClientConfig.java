@@ -15,6 +15,26 @@ import reactor.netty.http.client.HttpClient;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * WebClientConfig - Configuration class for Spring WebClient.
+ *
+ * This configuration provides a customized WebClient bean for making HTTP requests
+ * to the YugabyteDB Anywhere (YBA) REST API. The WebClient is configured with:
+ * <ul>
+ *   <li>Connection timeout settings</li>
+ *   <li>Read/write timeout handlers</li>
+ *   <li>Request/response logging filters</li>
+ *   <li>Reactive Netty HTTP client connector</li>
+ * </ul>
+ *
+ * <p>Timeout values are loaded from YbaProperties configuration.</p>
+ *
+ * @author SCB ePricing Team
+ * @version 2.0
+ * @since 2026-02-04
+ * @see YbaProperties
+ * @see WebClient
+ */
 @Configuration
 @Slf4j
 public class WebClientConfig {
@@ -22,6 +42,21 @@ public class WebClientConfig {
     @Autowired
     private YbaProperties ybaProperties;
 
+    /**
+     * Creates and configures a WebClient bean for YBA API integration.
+     *
+     * The WebClient is configured with:
+     * <ul>
+     *   <li>Connection timeout from ybaProperties.connectionTimeout</li>
+     *   <li>Response timeout from ybaProperties.readTimeout</li>
+     *   <li>Read timeout handler</li>
+     *   <li>Write timeout handler</li>
+     *   <li>Request logging filter (DEBUG level)</li>
+     *   <li>Response logging filter (DEBUG level)</li>
+     * </ul>
+     *
+     * @return Configured WebClient instance for making HTTP requests
+     */
     @Bean
     public WebClient webClient() {
         return WebClient.builder()

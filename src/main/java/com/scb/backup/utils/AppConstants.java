@@ -12,6 +12,7 @@ public class AppConstants {
     public static final String ERROR_MESSAGE = "error_message";
 
     public static final String FULL_BACKUP= "full_backup";
+    public static final String PAYLOAD= "payload";
     public static final String INCREMENTAL_BACKUP="incremental_backup";
 
     public static final String BACKUP_TYPE="backup_type";
@@ -38,4 +39,6 @@ public class AppConstants {
     public static final String BUSINESS_DATE = "businessDate";
 
     public static final String CATEGORY_CODE = "batchCategoryCode";
+    public static final String SUB_CATEGORY_CODE = "subBatchCategoryCode";
+
 }
