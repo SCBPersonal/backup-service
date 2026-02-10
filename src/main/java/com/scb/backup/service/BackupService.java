@@ -2,11 +2,14 @@ package com.scb.backup.service;
 
 import com.scb.backup.client.YbaClient;
 import com.scb.backup.dao.BackupDaoService;
+import com.scb.backup.event.BackupCompletionEvent;
 import com.scb.backup.utils.AppConstants;
 import com.scb.backup.utils.AppUtils;
 import com.hdfcbank.epricing.batch.core.lib.dao.BatchExecutionDao;
 import com.hdfcbank.epricing.batch.core.lib.service.GenericBatchService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -150,8 +153,9 @@ public class BackupService extends GenericBatchService {
     /**
      * Handles successful backup completion.
      *
-     * Updates the backup status to SUCCESS in the database and updates the batch
-     * execution status to COMPLETED in the batch framework.
+     * Updates the batch execution status to COMPLETED in the batch framework.
+     * Note: Backup status tracking is now handled in full_backup_tracker and
+     * incremental_backup_tracker tables by YbaClient and BackupPollerService.
      *
      * @param batchId Unique identifier for the batch execution
      * @param businessDate Business date for the backup operation
@@ -160,20 +164,19 @@ public class BackupService extends GenericBatchService {
      */
     private Mono<Void> handleBackupSuccess(String batchId, String businessDate, String ydbRes) {
         return Mono.fromRunnable(() -> {
-            backupDaoService.updateBackupStatus(batchId, AppConstants.BACKUP_SUCCESS_STATUS,
-                    AppUtils.toDate(businessDate), ydbRes);
+            // Update batch execution status in batch framework
             batchExecutionDao.updateBatchStatus(batchId, AppConstants.BATCH_COMPLETED_STATUS,
                     new HashMap<>(), businessDate);
-            log.info("Backup completed successfully for batch: {}", batchId);
+            log.info("Backup initiated successfully for batch: {}. Response: {}", batchId, ydbRes);
         });
     }
 
     /**
      * Handles backup failure scenarios.
      *
-     * Updates the backup status to FAILED in the database and updates the batch
-     * execution status to FAILED in the batch framework. Logs the error for
-     * troubleshooting.
+     * Updates the batch execution status to FAILED in the batch framework.
+     * Note: Backup status tracking is now handled in full_backup_tracker and
+     * incremental_backup_tracker tables by YbaClient and BackupPollerService.
      *
      * @param batchId Unique identifier for the batch execution
      * @param businessDate Business date for the backup operation
@@ -182,9 +185,8 @@ public class BackupService extends GenericBatchService {
      */
     private Mono<Void> handleBackupFailure(String batchId, String businessDate, Throwable e) {
         return Mono.fromRunnable(() -> {
-            log.error("Backup failed for batch: {}", batchId, e);
-            backupDaoService.updateBackupStatus(batchId, AppConstants.BACKUP_FAILED_STATUS,
-                    AppUtils.toDate(businessDate), e.getMessage());
+            log.error("Backup initiation failed for batch: {}", batchId, e);
+            // Update batch execution status in batch framework
             batchExecutionDao.updateBatchStatus(batchId, AppConstants.BATCH_FAILED_STATUS,
                     new HashMap<>(), businessDate);
         });
@@ -204,5 +206,35 @@ public class BackupService extends GenericBatchService {
         String date = batchExecutionDao.getBatchDetails(batchId, categoryCode)
                 .getId().getBatchExecutionDate();
         return AppUtils.getBusinessDate(date);
+    }
+
+    /**
+     * Event listener for backup completion events.
+     *
+     * This method is called asynchronously when BackupPollerService publishes a backup completion event.
+     * It updates the batch execution table with the final status (SUCCESS or FAILED).
+     *
+     * @param event BackupCompletionEvent containing batch details and completion status
+     */
+    @Async("backupPollerExecutor")
+    @EventListener
+    public void handleBackupCompletion(BackupCompletionEvent event) {
+        try {
+            String status = event.isSuccess() ? AppConstants.BATCH_COMPLETED_STATUS : AppConstants.BATCH_FAILED_STATUS;
+
+            log.info("Handling backup completion event for batch: {}, status: {}", event.getBatchId(), status);
+
+            // Update batch execution table
+            batchExecutionDao.updateBatchStatus(
+                event.getBatchId(),
+                status,
+                new HashMap<>(),
+                event.getBusinessDate()
+            );
+
+            log.info("Successfully updated batch execution status to {} for batch: {}", status, event.getBatchId());
+        } catch (Exception e) {
+            log.error("Error updating batch execution status for batch: {}", event.getBatchId(), e);
+        }
     }
 }

@@ -68,33 +68,16 @@ spring:
 #    }
 
 yba:
-  databases:
-    db1:
-      full-backup-url: ${YBA_FULL_BACKUP_URL:}
-      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID:}
-      api-token: ${YBA_API_TOKEN:}
-      universe-uuid: ${YBA_UNIVERSE_UUID:}
-      backup-type: PGSQL_TABLE_TYPE
-      backup-category-type: full_backup
-      db-name: ${YBA_DB_NAME:hbl_gcp_uat_epr_db}
-      expiry-ms: 86400000
+  # Common YBA Configuration - used across all databases
+  base-url: ${YBA_BASE_URL:https://db2/api/v1}
+  customer-id: ${YBA_CUSTOMER_ID:cust222}
 
-    db2:
-      full-backup-url: ${YBA_FULL_BACKUP_URL_2:}
-      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:}
-      last-backup-url: ${YBA_LAST_BACKUP_URL_2:}
-      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID_2:}
-      api-token: ${YBA_API_TOKEN_2:}
-      universe-uuid: ${YBA_UNIVERSE_UUID_2:}
-      backup-type: PGSQL_TABLE_TYPE
-      backup-category-type: incremental_backup
-      db-name: ${YBA_DB_NAME_2:hbl_gcp_uat_epr_db_2}
-      expiry-ms: 86400000
+  databases:
 
     uam-db:
-      full-backup-url: ${UAM_FULL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups}
-      incremental-backup-url: ${UAM_INCREMENTAL_BACKUP_URL:https://db2/api/v1/customers/cust222/backups/incremental}
-      last-backup-url: ${UAM_LAST_BACKUP_URL:https://db2/api/v1/customers/cust222/backups?limit=1&direction=DESC}
+      full-backup-url: ${UAM_FULL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups}
+      incremental-backup-url: ${UAM_INCREMENTAL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups/incremental}
+      last-backup-url: ${UAM_LAST_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups?limit=1&direction=DESC}
       storage-config-uuid: ${UAM_STORAGE_CONFIG_UUID:store222}
       api-token: ${UAM_API_TOKEN:}
       universe-uuid: ${UAM_UNIVERSE_UUID:}
@@ -107,6 +90,9 @@ data:
   # Full Backup Table Queries
   insert-full-backup:
     query: INSERT INTO epricing.full_backup_tracker(batch_id, category_code, business_date, backup_month, backup_status, task_uuid, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupMonth, :backupStatus, :taskUuid, CURRENT_TIMESTAMP) ON CONFLICT (category_code, backup_month) DO UPDATE SET batch_id = EXCLUDED.batch_id, business_date = EXCLUDED.business_date, backup_status = EXCLUDED.backup_status, task_uuid = EXCLUDED.task_uuid, start_time = EXCLUDED.start_time, updated_at = CURRENT_TIMESTAMP;
+
+  update-full-backup-response:
+    query: UPDATE epricing.full_backup_tracker SET full_backup_response = :fullBackupResponse, updated_at = CURRENT_TIMESTAMP WHERE category_code = :categoryCode AND backup_month = :backupMonth;
 
   update-full-backup-status:
     query: UPDATE epricing.full_backup_tracker SET backup_status = :backupStatus, error_message = :errorMessage, end_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE category_code = :categoryCode AND backup_month = :backupMonth;
@@ -123,13 +109,3 @@ data:
 
   update-incremental-backup-status:
     query: UPDATE epricing.incremental_backup_tracker SET backup_status = :backupStatus, incremental_backup_response = :backupResponse, error_message = :errorMessage, end_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE batch_id = :batchId AND category_code = :categoryCode;
-
-  # Legacy queries for backward compatibility (old batch_db_schedule_event_tracker table)
-  db-schedule-backup-insert:
-    query: INSERT INTO epricing.batch_db_schedule_event_tracker(batch_id, backup_job_categorycode, backup_status, backup_type, business_date, start_time) VALUES(:batch_id, :batchCategory, :backupStatus, :backupType, :business_date, :start_time);
-
-  update-schedule-backup:
-    query: UPDATE epricing.batch_db_schedule_event_tracker SET backup_status = :status, end_time = now(), backup_response = :ydbResponse WHERE batch_id = :batch_id AND business_date = :businessDate;
-
-  insert-base-backup-uuid:
-    query: INSERT INTO epricing.base_backup_uuid_tracker(category_code, base_backup_uuid, backup_month, updated_at) VALUES(:categoryCode, :baseBackupUuid, :backupMonth, CURRENT_TIMESTAMP) ON CONFLICT (category_code, backup_month) DO UPDATE SET base_backup_uuid = EXCLUDED.base_backup_uuid, updated_at = CURRENT_TIMESTAMP;

@@ -36,6 +36,9 @@ public class BackupDaoService {
     @Value("${data.insert-full-backup.query}")
     String insertFullBackup;
 
+    @Value("${data.update-full-backup-response.query}")
+    String updateFullBackupResponseQuery;
+
     @Value("${data.update-full-backup-status.query}")
     String updateFullBackupStatusQuery;
 
@@ -51,16 +54,6 @@ public class BackupDaoService {
 
     @Value("${data.update-incremental-backup-status.query}")
     String updateIncrementalBackupStatusQuery;
-
-    // Legacy queries for backward compatibility (old batch_db_schedule_event_tracker table)
-    @Value("${data.db-schedule-backup-insert.query:#{null}}")
-    String insertScheduleBackup;
-
-    @Value("${data.update-schedule-backup.query:#{null}}")
-    String updateDbackupStatus;
-
-    @Value("${data.insert-base-backup-uuid.query:#{null}}")
-    String insertBaseBackupUuid;
 
     // ==================== FULL BACKUP TABLE OPERATIONS ====================
 
@@ -91,6 +84,30 @@ public class BackupDaoService {
         } catch (Exception e) {
             log.error("Unable to insert full backup record for category: {}", categoryCode, e);
             throw new DbBackupException("Error inserting full backup record for category: " + categoryCode, e);
+        }
+    }
+
+    /**
+     * Updates the full backup response immediately after API call.
+     *
+     * @param categoryCode Backup category code
+     * @param backupMonth Month in YYYY-MM format
+     * @param fullBackupResponse YBA API response JSON
+     * @throws DbBackupException if database operation fails
+     */
+    public void updateFullBackupResponse(String categoryCode, String backupMonth, String fullBackupResponse) {
+        log.info("Updating full backup response for category: {}, month: {}", categoryCode, backupMonth);
+        Map<String, Object> param = new HashMap<>();
+        try {
+            param.put("categoryCode", categoryCode);
+            param.put("backupMonth", backupMonth);
+            param.put("fullBackupResponse", fullBackupResponse);
+
+            jdbcTemplate.update(updateFullBackupResponseQuery, param);
+            log.info("Full backup response updated successfully for category: {}", categoryCode);
+        } catch (Exception e) {
+            log.error("Unable to update full backup response for category: {}", categoryCode, e);
+            throw new DbBackupException("Error updating full backup response for category: " + categoryCode, e);
         }
     }
 
@@ -231,87 +248,6 @@ public class BackupDaoService {
         } catch (Exception e) {
             log.error("Unable to update incremental backup status for batch: {}", batchId, e);
             throw new DbBackupException("Error updating incremental backup status for batch: " + batchId, e);
-        }
-    }
-
-    // ==================== LEGACY METHODS (For backward compatibility) ====================
-
-    /**
-     * Legacy method for inserting backup details into batch_db_schedule_event_tracker table.
-     * This method is kept for backward compatibility with existing code.
-     *
-     * @deprecated Use insertFullBackupRecord or insertIncrementalBackupRecord instead
-     */
-    @Deprecated
-    public void insertBackupDetails(Map<String,Object> backupDetails, String backupStatus, String backupType) {
-        if (insertScheduleBackup == null) {
-            log.warn("Legacy insertScheduleBackup query not configured. Skipping legacy insert.");
-            return;
-        }
-        log.info("Inserting data in legacy Backup Table:");
-        try {
-            backupDetails.put("batch_id", backupDetails.get(AppConstants.BATCH_ID));
-            backupDetails.put("batchCategory", backupDetails.get(AppConstants.CATEGORY_CODE));
-            backupDetails.put("backupStatus", AppConstants.BACKUP_INPROGRESS_STATUS);
-            backupDetails.put("backupType", backupType);
-            backupDetails.put("business_date", AppConstants.BUSINESS_DATE);
-            backupDetails.put("start_time", Timestamp.valueOf(LocalDateTime.now()));
-            jdbcTemplate.update(insertScheduleBackup, backupDetails);
-        } catch (Exception e) {
-            log.error("Unable to Insert data in legacy Backup Table ", e);
-            throw new DbBackupException("Unable to Insert data in legacy Backup Table", e);
-        }
-    }
-
-    /**
-     * Legacy method for updating backup status in batch_db_schedule_event_tracker table.
-     * This method is kept for backward compatibility with existing code.
-     *
-     * @deprecated Use updateFullBackupStatus or updateIncrementalBackupStatus instead
-     */
-    @Deprecated
-    public void updateBackupStatus(String batch_id, String status, Date businessDate, String ydbResponse) {
-        if (updateDbackupStatus == null) {
-            log.warn("Legacy updateDbackupStatus query not configured. Skipping legacy update.");
-            return;
-        }
-        log.info("Updating the status of backup event for batch_id : {}", batch_id);
-        Map<String, Object> param = new HashMap<>();
-        try {
-            param.put("batch_id", batch_id);
-            param.put("status", status);
-            param.put("businessDate", new java.sql.Date(businessDate.getTime()));
-            param.put("ydbResponse", ydbResponse);
-            jdbcTemplate.update(updateDbackupStatus, param);
-        } catch (Exception e) {
-            log.error("Unable to update data in backup Table for batch_id : {}", batch_id, e);
-            throw new DbBackupException("Error updating batch execution status for batch_id: " + batch_id, e);
-        }
-    }
-
-    /**
-     * Legacy method for storing base backup UUID in base_backup_uuid_tracker table.
-     * This method is kept for backward compatibility with existing code.
-     *
-     * @deprecated Use updateFullBackupWithBaseUuid instead
-     */
-    @Deprecated
-    public void storeBaseBackupUuid(String categoryCode, String baseBackupUuid, String backupMonth) {
-        if (insertBaseBackupUuid == null) {
-            log.warn("Legacy insertBaseBackupUuid query not configured. Skipping legacy store.");
-            return;
-        }
-        log.info("Storing base backup UUID in legacy table for category: {}, month: {}", categoryCode, backupMonth);
-        Map<String, Object> param = new HashMap<>();
-        try {
-            param.put("categoryCode", categoryCode);
-            param.put("baseBackupUuid", baseBackupUuid);
-            param.put("backupMonth", backupMonth);
-            int rowsAffected = jdbcTemplate.update(insertBaseBackupUuid, param);
-            log.info("Base backup UUID stored successfully in legacy table. Rows affected: {}", rowsAffected);
-        } catch (Exception e) {
-            log.error("Unable to store base backup UUID in legacy table for category: {}, month: {}", categoryCode, backupMonth, e);
-            throw new DbBackupException("Error storing base backup UUID in legacy table for category: " + categoryCode, e);
         }
     }
 }
