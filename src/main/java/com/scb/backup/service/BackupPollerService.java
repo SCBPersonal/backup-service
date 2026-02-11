@@ -7,11 +7,10 @@ import com.scb.backup.model.YbaDynamicConfig;
 import com.scb.backup.utils.AppConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.time.Duration;
 
@@ -47,96 +46,134 @@ public class BackupPollerService {
     private final WebClient webClient;
     private final BackupDaoService backupDaoService;
     private final BackupPollerProperties pollerProperties;
-    private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * Starts polling for backup job completion asynchronously in a separate thread.
+     * Starts polling for FULL backup job completion reactively using Mono.
      *
-     * This method polls the YBA task status API until the job completes or max attempts reached.
-     * It runs asynchronously in a background thread and updates both the backup tracker and batch execution tables.
+     * This method polls the YBA task status API until the job completes (no attempt limit).
+     * It runs in the same reactive thread chain and returns a Mono that completes when polling finishes.
+     * Polling will continue indefinitely until the backup job reaches a terminal state.
      *
      * @param config YBA dynamic configuration
      * @param categoryCode Backup category code
      * @param backupMonth Month in YYYY-MM format
      * @param taskUuid YBA task UUID to poll
      * @param customerUuid YBA customer UUID
-     * @param batchId Batch execution ID
-     * @param businessDate Business date in YYYYMMDD format
+     * @return Mono<String> containing the base UUID on success, or error on failure
      */
-    @Async("backupPollerExecutor")
-    public void startPolling(YbaDynamicConfig config, String categoryCode, String backupMonth,
-                            String taskUuid, String customerUuid, String batchId, String businessDate) {
+    public Mono<String> pollFullBackupCompletion(YbaDynamicConfig config, String categoryCode, String backupMonth,
+                                                  String taskUuid, String customerUuid) {
         if (!pollerProperties.isEnabled()) {
             log.info("Backup poller is disabled. Skipping polling for task: {}", taskUuid);
-            return;
+            return Mono.error(new RuntimeException("Backup poller is disabled"));
         }
 
-        log.info("Starting backup poller for category: {}, task: {}", categoryCode, taskUuid);
+        log.info("Starting reactive backup poller for FULL backup - category: {}, task: {}", categoryCode, taskUuid);
 
-        try {
-            // Initial delay before first poll
-            Thread.sleep(pollerProperties.getInitialDelayMs());
-
-            int attempts = 0;
-            boolean jobCompleted = false;
-
-            while (attempts < pollerProperties.getMaxPollAttempts() && !jobCompleted) {
-                attempts++;
-                log.debug("Polling attempt {}/{} for task: {}", attempts, pollerProperties.getMaxPollAttempts(), taskUuid);
-
-                try {
-                    // Check job status reactively using doOnNext for logging
-                    String jobStatus = checkJobStatus(config, taskUuid, customerUuid)
-                            .doOnNext(status -> log.debug("Job status for task {}: {}", taskUuid, status))
-                            .block();
-
+        return Mono.delay(Duration.ofMillis(pollerProperties.getInitialDelayMs()))
+                .then(pollJobStatusWithRetry(config, taskUuid, customerUuid))
+                .flatMap(jobStatus -> {
                     if ("Success".equalsIgnoreCase(jobStatus)) {
-                        log.info("Backup job completed successfully for task: {}", taskUuid);
-                        handleJobSuccess(config, categoryCode, backupMonth, batchId, businessDate);
-                        jobCompleted = true;
-                    } else if ("Failure".equalsIgnoreCase(jobStatus) || "Aborted".equalsIgnoreCase(jobStatus)) {
-                        log.error("Backup job failed for task: {}, status: {}", taskUuid, jobStatus);
-                        handleJobFailure(categoryCode, backupMonth, batchId, businessDate, "Job failed with status: " + jobStatus);
-                        jobCompleted = true;
+                        log.info("Full backup job completed successfully for task: {}", taskUuid);
+                        return handleFullBackupSuccess(config, categoryCode, backupMonth, taskUuid);
                     } else {
-                        log.debug("Backup job still in progress for task: {}, status: {}", taskUuid, jobStatus);
+                        log.error("Full backup job failed for task: {}, status: {}", taskUuid, jobStatus);
+                        return handleFullBackupFailure(categoryCode, backupMonth, "Job failed with status: " + jobStatus);
                     }
+                })
+                .doOnError(error -> {
+                    log.error("Error during full backup polling for task: {}", taskUuid, error);
+                    backupDaoService.updateFullBackupStatus(categoryCode, backupMonth,
+                            AppConstants.BACKUP_FAILED_STATUS, "Polling error: " + error.getMessage());
+                });
+    }
 
-                    if (!jobCompleted) {
-                        Thread.sleep(pollerProperties.getPollingIntervalMs());
-                    }
-
-                } catch (Exception e) {
-                    log.error("Error polling job status for task: {}, attempt: {}", taskUuid, attempts, e);
-                    if (attempts >= pollerProperties.getMaxPollAttempts()) {
-                        handleJobFailure(categoryCode, backupMonth, batchId, businessDate, "Polling failed after " + attempts + " attempts: " + e.getMessage());
-                    }
-                }
-            }
-
-            if (!jobCompleted) {
-                log.error("Max polling attempts reached for task: {}. Marking as failed.", taskUuid);
-                handleJobFailure(categoryCode, backupMonth, batchId, businessDate, "Max polling attempts (" + pollerProperties.getMaxPollAttempts() + ") reached");
-            }
-
-        } catch (InterruptedException e) {
-            log.error("Polling interrupted for task: {}", taskUuid, e);
-            Thread.currentThread().interrupt();
-            handleJobFailure(categoryCode, backupMonth, batchId, businessDate, "Polling interrupted: " + e.getMessage());
+    /**
+     * Starts polling for INCREMENTAL backup job completion reactively using Mono.
+     *
+     * This method polls the YBA task status API until the job completes (no attempt limit).
+     * Polling will continue indefinitely until the backup job reaches a terminal state.
+     *
+     * @param config YBA dynamic configuration
+     * @param categoryCode Backup category code
+     * @param backupMonth Month in YYYY-MM format
+     * @param taskUuid YBA task UUID to poll
+     * @param customerUuid YBA customer UUID
+     * @param baseUuid Base UUID of the full backup
+     * @return Mono<Void> that completes when polling finishes
+     */
+    public Mono<Void> pollIncrementalBackupCompletion(YbaDynamicConfig config, String categoryCode, String backupMonth,
+                                                       String taskUuid, String customerUuid, String baseUuid) {
+        if (!pollerProperties.isEnabled()) {
+            log.info("Backup poller is disabled. Skipping polling for task: {}", taskUuid);
+            return Mono.error(new RuntimeException("Backup poller is disabled"));
         }
+
+        log.info("Starting reactive backup poller for INCREMENTAL backup - category: {}, task: {}", categoryCode, taskUuid);
+
+        return Mono.delay(Duration.ofMillis(pollerProperties.getInitialDelayMs()))
+                .then(pollJobStatusWithRetry(config, taskUuid, customerUuid))
+                .flatMap(jobStatus -> {
+                    if ("Success".equalsIgnoreCase(jobStatus)) {
+                        log.info("Incremental backup job completed successfully for task: {}", taskUuid);
+                        return handleIncrementalBackupSuccess(categoryCode, backupMonth, baseUuid);
+                    } else {
+                        log.error("Incremental backup job failed for task: {}, status: {}", taskUuid, jobStatus);
+                        return handleIncrementalBackupFailure(categoryCode, backupMonth, baseUuid, "Job failed with status: " + jobStatus);
+                    }
+                })
+                .doOnError(error -> {
+                    log.error("Error during incremental backup polling for task: {}", taskUuid, error);
+                    backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, backupMonth, baseUuid,
+                            AppConstants.BACKUP_FAILED_STATUS, "Polling error: " + error.getMessage());
+                });
+    }
+
+    /**
+     * Polls job status with retry logic until job completes (infinite retry).
+     *
+     * This method will continue polling indefinitely until the backup job completes.
+     * There is no maximum attempt limit - it will keep polling until success, failure, or abort.
+     *
+     * @param config YBA configuration
+     * @param taskUuid Task UUID to check
+     * @param customerUuid Customer UUID
+     * @return Mono of final job status string (e.g., "Success", "Failure", "Aborted")
+     */
+    private Mono<String> pollJobStatusWithRetry(YbaDynamicConfig config, String taskUuid, String customerUuid) {
+        return checkJobStatus(config, taskUuid, customerUuid)
+                .flatMap(status -> {
+                    if ("Success".equalsIgnoreCase(status) ||
+                        "Failure".equalsIgnoreCase(status) ||
+                        "Aborted".equalsIgnoreCase(status)) {
+                        // Job completed
+                        return Mono.just(status);
+                    } else {
+                        // Job still running, throw error to trigger retry
+                        return Mono.error(new RuntimeException("Job still in progress: " + status));
+                    }
+                })
+                .retryWhen(Retry.fixedDelay(Long.MAX_VALUE,
+                        Duration.ofMillis(pollerProperties.getPollingIntervalMs()))
+                        .filter(throwable -> throwable.getMessage().contains("Job still in progress"))
+                        .doBeforeRetry(retrySignal ->
+                            log.info("Polling attempt {} for task: {} - Job still in progress, retrying...",
+                                retrySignal.totalRetries() + 1,
+                                taskUuid))
+                );
     }
 
     /**
      * Checks the job status from YBA API reactively.
      *
-     * @param config YBA configuration
+     * @param config YBA configuration (contains job-completion-check-url from database config)
      * @param taskUuid Task UUID to check
-     * @param customerUuid Customer UUID
+     * @param customerUuid Customer UUID (not used if URL already contains customer ID)
      * @return Mono of job status string (e.g., "Success", "Failure", "Running")
      */
     private Mono<String> checkJobStatus(YbaDynamicConfig config, String taskUuid, String customerUuid) {
-        String url = pollerProperties.getJobCompletionCheckUrl()
-                .replace("{customerUuid}", customerUuid)
+        // Get job completion check URL from database-specific config
+        String url = config.getJobCompletionCheckUrl()
                 .replace("{taskUuid}", taskUuid);
 
         return webClient.get()
@@ -154,138 +191,163 @@ public class BackupPollerService {
     }
 
     /**
-     * Handles successful job completion.
-     * Fetches the last backup to get base UUID and updates the backup tracker table.
-     * Publishes an event for BackupService to update batch execution table.
+     * Handles successful FULL backup completion.
+     * Fetches the last backup to get base UUID and task UUID, validates they match,
+     * then updates the full_backup_tracker table.
+     *
+     * @param config YBA dynamic configuration
+     * @param categoryCode Backup category code
+     * @param backupMonth Month in YYYY-MM format
+     * @param expectedTaskUuid Task UUID from the full backup response (the one we're polling)
+     * @return Mono<String> containing the base UUID
      */
-    private void handleJobSuccess(YbaDynamicConfig config, String categoryCode, String backupMonth,
-                                  String batchId, String businessDate) {
-        try {
-            // Fetch last backup to get base UUID
-            String baseUuid = fetchLastBackupUuid(config);
+    private Mono<String> handleFullBackupSuccess(YbaDynamicConfig config, String categoryCode, String backupMonth, String expectedTaskUuid) {
+        return fetchLastBackupDetailsReactive(config)
+                .flatMap(backupDetails -> {
+                    String baseUuid = backupDetails.get("baseUuid");
+                    String fetchedTaskUuid = backupDetails.get("taskUuid");
 
-            if (baseUuid != null && !baseUuid.isEmpty()) {
-                // Update full_backup_tracker with base UUID and SUCCESS status
-                backupDaoService.updateFullBackupWithBaseUuid(categoryCode, backupMonth, baseUuid);
-                log.info("Successfully updated full backup with base UUID: {} for category: {}", baseUuid, categoryCode);
+                    // Validate that task UUIDs match
+                    if (fetchedTaskUuid == null || !fetchedTaskUuid.equals(expectedTaskUuid)) {
+                        String errorMsg = String.format(
+                                "Task UUID mismatch! Expected: %s, but last backup has: %s. This indicates a different backup was created.",
+                                expectedTaskUuid, fetchedTaskUuid);
+                        log.error(errorMsg);
+                        backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS, errorMsg);
+                        return Mono.error(new RuntimeException(errorMsg));
+                    }
 
-                // Publish success event for BackupService to update batch execution
-                eventPublisher.publishEvent(
-                    com.scb.backup.event.BackupCompletionEvent.success(this, batchId, categoryCode, businessDate, backupMonth)
-                );
-                log.info("Published backup success event for batch: {}", batchId);
-            } else {
-                log.error("Failed to fetch base UUID from last backup for category: {}", categoryCode);
-                backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS,
-                        "Failed to fetch base UUID from last backup");
+                    log.info("Task UUID validation successful. Expected: {}, Fetched: {}", expectedTaskUuid, fetchedTaskUuid);
 
-                // Publish failure event
-                eventPublisher.publishEvent(
-                    com.scb.backup.event.BackupCompletionEvent.failure(this, batchId, categoryCode, businessDate,
-                        backupMonth, "Failed to fetch base UUID from last backup")
-                );
-            }
-        } catch (Exception e) {
-            log.error("Error handling job success for category: {}", categoryCode, e);
-            backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS,
-                    "Error fetching base UUID: " + e.getMessage());
-
-            // Publish failure event
-            eventPublisher.publishEvent(
-                com.scb.backup.event.BackupCompletionEvent.failure(this, batchId, categoryCode, businessDate,
-                    backupMonth, "Error fetching base UUID: " + e.getMessage())
-            );
-        }
+                    if (baseUuid != null && !baseUuid.isEmpty()) {
+                        // Update full_backup_tracker with base UUID and SUCCESS status
+                        backupDaoService.updateFullBackupWithBaseUuid(categoryCode, backupMonth, baseUuid);
+                        log.info("Successfully updated full backup with base UUID: {} for category: {}", baseUuid, categoryCode);
+                        return Mono.just(baseUuid);
+                    } else {
+                        log.error("Failed to fetch base UUID from last backup for category: {}", categoryCode);
+                        backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS,
+                                "Failed to fetch base UUID from last backup");
+                        return Mono.error(new RuntimeException("Failed to fetch base UUID from last backup"));
+                    }
+                })
+                .onErrorResume(error -> {
+                    log.error("Error handling full backup success for category: {}", categoryCode, error);
+                    backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS,
+                            "Error fetching base UUID: " + error.getMessage());
+                    return Mono.error(error);
+                });
     }
 
     /**
-     * Handles job failure.
-     * Updates the backup tracker table with failure status and publishes event for batch execution update.
+     * Handles FULL backup failure.
+     * Updates the full_backup_tracker table with failure status.
+     *
+     * @return Mono<String> that errors with the failure message
      */
-    private void handleJobFailure(String categoryCode, String backupMonth, String batchId,
-                                  String businessDate, String errorMessage) {
-        try {
-            // Update full_backup_tracker with FAILED status
-            backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS, errorMessage);
-            log.info("Updated full backup status to FAILED for category: {}", categoryCode);
-
-            // Publish failure event for BackupService to update batch execution
-            eventPublisher.publishEvent(
-                com.scb.backup.event.BackupCompletionEvent.failure(this, batchId, categoryCode, businessDate,
-                    backupMonth, errorMessage)
-            );
-            log.info("Published backup failure event for batch: {}", batchId);
-        } catch (Exception e) {
-            log.error("Error updating failure status for category: {}, batch: {}", categoryCode, batchId, e);
-        }
+    private Mono<String> handleFullBackupFailure(String categoryCode, String backupMonth, String errorMessage) {
+        backupDaoService.updateFullBackupStatus(categoryCode, backupMonth, AppConstants.BACKUP_FAILED_STATUS, errorMessage);
+        log.info("Updated full backup status to FAILED for category: {}", categoryCode);
+        return Mono.error(new RuntimeException(errorMessage));
     }
 
     /**
-     * Fetches the base backup UUID from YBA's last backup API using POST method.
+     * Handles successful INCREMENTAL backup completion.
+     * Updates the incremental_backup_tracker table with SUCCESS status.
+     *
+     * @return Mono<Void> that completes when update is done
+     */
+    private Mono<Void> handleIncrementalBackupSuccess(String categoryCode, String backupMonth, String baseUuid) {
+        return Mono.fromRunnable(() -> {
+            backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, backupMonth, baseUuid,
+                    AppConstants.BACKUP_SUCCESS_STATUS, null);
+            log.info("Successfully updated incremental backup status to SUCCESS for category: {}, baseUuid: {}",
+                    categoryCode, baseUuid);
+        });
+    }
+
+    /**
+     * Handles INCREMENTAL backup failure.
+     * Updates the incremental_backup_tracker table with failure status.
+     *
+     * @return Mono<Void> that errors with the failure message
+     */
+    private Mono<Void> handleIncrementalBackupFailure(String categoryCode, String backupMonth, String baseUuid, String errorMessage) {
+        backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, backupMonth, baseUuid,
+                AppConstants.BACKUP_FAILED_STATUS, errorMessage);
+        log.info("Updated incremental backup status to FAILED for category: {}", categoryCode);
+        return Mono.error(new RuntimeException(errorMessage));
+    }
+
+    /**
+     * Fetches the base backup UUID and task UUID from YBA's last backup API using POST method - REACTIVE VERSION.
      *
      * YBA requires POST method with pagination parameters to fetch the latest backup.
      * We request the most recent backup by sorting descending by createTime.
-     * Uses flatMap for reactive processing.
      *
      * @param config YBA configuration
-     * @return Base backup UUID or null if not found
+     * @return Mono<Map<String, String>> containing both "baseUuid" and "taskUuid", or empty if not found
      */
-    private String fetchLastBackupUuid(YbaDynamicConfig config) {
-        try {
-            // Create request body for pagination - get latest backup
-            String requestBody = """
-                {
-                    "direction": "DESC",
-                    "limit": 1,
-                    "sortBy": "createTime",
-                    "filter": {
-                        "universeUUIDList": ["%s"]
-                    }
+    private Mono<java.util.Map<String, String>> fetchLastBackupDetailsReactive(YbaDynamicConfig config) {
+        // Create request body for pagination - get latest backup
+        String requestBody = """
+            {
+                "direction": "DESC",
+                "limit": 1,
+                "sortBy": "createTime",
+                "filter": {
+                    "universeUUIDList": ["%s"]
                 }
-                """.formatted(config.getUniverseUuid());
+            }
+            """.formatted(config.getUniverseUuid());
 
-            return webClient.post()
-                    .uri(config.getLastBackupUrl())
-                    .header("Accept", "application/json")
-                    .header("Content-Type", "application/json")
-                    .header("X-AUTH-YW-API-TOKEN", config.getApiToken())
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .flatMap(response -> {
-                        String uuid = extractBackupUuidFromLastBackup(response);
-                        return Mono.justOrEmpty(uuid);
-                    })
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
-        } catch (Exception e) {
-            log.error("Error fetching last backup UUID", e);
-            return null;
-        }
+        return webClient.post()
+                .uri(config.getLastBackupUrl())
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .header("X-AUTH-YW-API-TOKEN", config.getApiToken())
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .flatMap(response -> {
+                    java.util.Map<String, String> details = extractBackupDetailsFromLastBackup(response);
+                    return Mono.justOrEmpty(details);
+                })
+                .timeout(Duration.ofSeconds(30))
+                .onErrorResume(error -> {
+                    log.error("Error fetching last backup details", error);
+                    return Mono.empty();
+                });
     }
 
     /**
-     * Extracts the backup UUID from the paginated last backup API response.
+     * Extracts the backup UUID and task UUID from the paginated last backup API response.
      *
      * The POST API returns a paginated response with structure:
      * {
      *   "entities": [
      *     {
      *       "backupUUID": "...",
+     *       "taskUUID": "...",
      *       "commonBackupInfo": {
-     *         "baseBackupUUID": "..."
+     *         "baseBackupUUID": "...",
+     *         "taskUUID": "..."
      *       }
      *     }
      *   ]
      * }
      *
      * @param response JsonNode containing the paginated last backup API response
-     * @return String containing the extracted backup UUID, or null if not found
+     * @return Map containing "baseUuid" and "taskUuid", or null if not found
      */
-    private String extractBackupUuidFromLastBackup(JsonNode response) {
+    private java.util.Map<String, String> extractBackupDetailsFromLastBackup(JsonNode response) {
         if (response == null) {
             return null;
         }
+
+        java.util.Map<String, String> details = new java.util.HashMap<>();
+        String baseUuid = null;
+        String taskUuid = null;
 
         // Check if response has entities array (paginated response)
         JsonNode entities = response.path("entities");
@@ -293,39 +355,47 @@ public class BackupPollerService {
             JsonNode firstBackup = entities.get(0);
 
             // Try to get backupUUID from first entity
-            String uuid = firstBackup.path("backupUUID").asText(null);
-            if (uuid != null) {
-                return uuid;
+            baseUuid = firstBackup.path("backupUUID").asText(null);
+            if (baseUuid == null) {
+                // Try commonBackupInfo.baseBackupUUID
+                baseUuid = firstBackup.path("commonBackupInfo").path("baseBackupUUID").asText(null);
+            }
+            if (baseUuid == null) {
+                // Try resourceUUID as fallback
+                baseUuid = firstBackup.path("resourceUUID").asText(null);
             }
 
-            // Try commonBackupInfo.baseBackupUUID
-            uuid = firstBackup.path("commonBackupInfo").path("baseBackupUUID").asText(null);
-            if (uuid != null) {
-                return uuid;
+            // Try to get taskUUID from first entity
+            taskUuid = firstBackup.path("taskUUID").asText(null);
+            if (taskUuid == null) {
+                // Try commonBackupInfo.taskUUID
+                taskUuid = firstBackup.path("commonBackupInfo").path("taskUUID").asText(null);
+            }
+        } else {
+            // Fallback: Try direct fields (in case response structure is different)
+            baseUuid = response.path("backupUUID").asText(null);
+            if (baseUuid == null) {
+                baseUuid = response.path("commonBackupInfo").path("baseBackupUUID").asText(null);
+            }
+            if (baseUuid == null) {
+                baseUuid = response.path("resourceUUID").asText(null);
             }
 
-            // Try resourceUUID as fallback
-            uuid = firstBackup.path("resourceUUID").asText(null);
-            if (uuid != null) {
-                return uuid;
+            taskUuid = response.path("taskUUID").asText(null);
+            if (taskUuid == null) {
+                taskUuid = response.path("commonBackupInfo").path("taskUUID").asText(null);
             }
         }
 
-        // Fallback: Try direct fields (in case response structure is different)
-        String uuid = response.path("backupUUID").asText(null);
-        if (uuid != null) {
-            return uuid;
+        if (baseUuid != null || taskUuid != null) {
+            details.put("baseUuid", baseUuid);
+            details.put("taskUuid", taskUuid);
+            log.info("Extracted backup details - Base UUID: {}, Task UUID: {}", baseUuid, taskUuid);
+            return details;
         }
 
-        // Try commonBackupInfo.baseBackupUUID
-        uuid = response.path("commonBackupInfo").path("baseBackupUUID").asText(null);
-        if (uuid != null) {
-            return uuid;
-        }
-
-        // Try resourceUUID as fallback
-        uuid = response.path("resourceUUID").asText(null);
-        return uuid;
+        log.warn("Failed to extract backup details from response");
+        return null;
     }
 }
 

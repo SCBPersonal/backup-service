@@ -1,7 +1,9 @@
 package com.scb.backup.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * YbaDynamicConfig - Configuration model for YugabyteDB Anywhere (YBA) backup settings.
@@ -19,8 +21,10 @@ import lombok.Data;
  * @see com.scb.backup.config.YbaProperties
  * @see com.scb.backup.service.YbaConfigService
  */
-@Builder
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class YbaDynamicConfig {
     /** YBA API authentication token */
     private String apiToken;
@@ -42,6 +46,9 @@ public class YbaDynamicConfig {
 
     /** YBA API endpoint URL to fetch last backup details */
     private String lastBackupUrl;
+
+    /** YBA API endpoint URL template for checking job completion status (contains {taskUuid} placeholder) */
+    private String jobCompletionCheckUrl;
 
     /** Backup expiry time in milliseconds */
     private Long expiryMs;

@@ -17,7 +17,7 @@ The **backup-orchestrator-service** is a Spring Boot-based microservice that orc
 - **Resilient operations** with retry mechanisms for transient failures
 
 ### 1.2 Architecture Overview
-The service follows a **layered reactive architecture**:
+The service follows a **layered reactive architecture with async polling**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -31,6 +31,13 @@ The service follows a **layered reactive architecture**:
 │  │BackupService │  │YbaConfigSvc  │  │ValidationSvc │      │
 │  │(Batch Exec)  │  │(Config Mgmt) │  │(Validation)  │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                              │
+│  ┌──────────────────────────────────────────────────┐       │
+│  │      BackupPollerService (Async Polling)         │       │
+│  │  - Polls YBA for job completion                  │       │
+│  │  - Updates base UUID after full backup completes │       │
+│  │  - Runs in parallel threads                      │       │
+│  └──────────────────────────────────────────────────┘       │
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
@@ -41,20 +48,72 @@ The service follows a **layered reactive architecture**:
 │  └──────┬───────┘              └──────┬───────┘            │
 └─────────┼──────────────────────────────┼───────────────────┘
           │                              │
-┌─────────▼──────────┐         ┌─────────▼──────────┐
-│  YugabyteDB        │         │  YugabyteDB        │
-│  Anywhere (YBA)    │         │  (Tracking DB)     │
-│  REST API          │         │  batch_db_schedule │
-└────────────────────┘         └────────────────────┘
+┌─────────▼──────────┐         ┌─────────▼──────────────────┐
+│  YugabyteDB        │         │  YugabyteDB (Tracking DB)  │
+│  Anywhere (YBA)    │         │  ┌──────────────────────┐  │
+│  REST API          │         │  │ Batch Execution Tbl  │  │
+└────────────────────┘         │  │ (Batch Core Lib)     │  │
+                               │  └──────────────────────┘  │
+                               │  ┌──────────────────────┐  │
+                               │  │ full_backup_tracker  │  │
+                               │  │ (Full Backup State)  │  │
+                               │  └──────────────────────┘  │
+                               │  ┌──────────────────────┐  │
+                               │  │incremental_backup_   │  │
+                               │  │tracker (Incr State)  │  │
+                               │  └──────────────────────┘  │
+                               └────────────────────────────┘
 ```
 
 ### 1.3 Key Responsibilities
 1. **Backup Orchestration**: Initiate full and incremental backups via YBA API
 2. **Configuration Management**: Resolve database-specific backup configurations dynamically
-3. **State Tracking**: Persist backup job status (IN_PROGRESS, SUCCESS, FAILED) to database
-4. **Validation**: Validate batch parameters and backup configurations before execution
-5. **Error Handling**: Handle failures gracefully with retry mechanisms and exception tracking
-6. **Batch Integration**: Extend generic batch framework for backup-specific workflows
+3. **State Tracking**: Persist backup job status using three-table design:
+   - **Batch Execution Table** (handled by batch core library)
+   - **full_backup_tracker** (full backup lifecycle and base UUID storage)
+   - **incremental_backup_tracker** (incremental backup lifecycle)
+4. **Async Polling**: Monitor YBA job completion in parallel threads via BackupPollerService
+5. **Base UUID Management**: Store and retrieve base backup UUIDs for monthly incremental backups
+6. **Validation**: Validate batch parameters and backup configurations before execution
+7. **Error Handling**: Handle failures gracefully with retry mechanisms and exception tracking
+8. **Batch Integration**: Extend generic batch framework for backup-specific workflows
+
+### 1.4 Three-Table Design
+
+#### Table 1: Batch Execution Table (Managed by Batch Core Library)
+- **Purpose**: Track overall batch job execution
+- **Managed By**: Batch framework (no direct service interaction)
+- **Updates**: BackupService updates batch status (COMPLETED/FAILED)
+
+#### Table 2: full_backup_tracker
+- **Purpose**: Track full backup operations and store base UUID
+- **Key Fields**:
+  - `batch_id`, `category_code`, `business_date`, `backup_month`
+  - `backup_status` (IN_PROGRESS, SUCCESS, FAILED)
+  - `full_backup_response` (YBA API response JSON)
+  - `base_backup_uuid` (populated after job completion by poller)
+  - `task_uuid` (for polling job status)
+  - `error_message`, `start_time`, `end_time`
+- **Unique Constraint**: `(category_code, backup_month)` - one full backup per category per month
+- **Flow**:
+  1. YbaClient inserts record with task_uuid when backup starts
+  2. YbaClient updates with full_backup_response immediately after API call
+  3. BackupPollerService polls for job completion
+  4. BackupPollerService updates with base_backup_uuid and SUCCESS status
+
+#### Table 3: incremental_backup_tracker
+- **Purpose**: Track incremental backup operations
+- **Key Fields**:
+  - `batch_id`, `category_code`, `business_date`, `backup_month`
+  - `base_backup_uuid` (reference to full backup)
+  - `backup_status` (IN_PROGRESS, SUCCESS, FAILED)
+  - `incremental_backup_response` (YBA API response JSON)
+  - `task_uuid`, `error_message`, `start_time`, `end_time`
+- **No Unique Constraint**: Multiple incremental backups allowed per category per month
+- **Flow**:
+  1. YbaClient fetches base_backup_uuid from full_backup_tracker
+  2. YbaClient inserts record with base_backup_uuid and task_uuid
+  3. YbaClient updates with incremental_backup_response after API call
 
 ---
 
@@ -532,9 +591,14 @@ SERVER_PORT=8989
 **Configuration Structure** (`application.yml`):
 ```yaml
 yba:
+  # Common YBA Configuration - used across all databases
+  base-url: ${YBA_BASE_URL:https://yba-api.example.com/api/v1}
+  customer-id: ${YBA_CUSTOMER_ID:cust123}
+
   databases:
     db1:
-      full-backup-url: ${YBA_FULL_BACKUP_URL:}
+      full-backup-url: ${YBA_FULL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups}
+      job-completion-check-url: ${YBA_JOB_CHECK_URL:${yba.base-url}/customers/${yba.customer-id}/tasks/{taskUuid}}
       storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID:}
       api-token: ${YBA_API_TOKEN:}
       universe-uuid: ${YBA_UNIVERSE_UUID:}
@@ -544,9 +608,10 @@ yba:
       expiry-ms: 86400000  # 24 hours
 
     db2:
-      full-backup-url: ${YBA_FULL_BACKUP_URL_2:}
-      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:}
-      last-backup-url: ${YBA_LAST_BACKUP_URL_2:}
+      full-backup-url: ${YBA_FULL_BACKUP_URL_2:${yba.base-url}/customers/${yba.customer-id}/backups}
+      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:${yba.base-url}/customers/${yba.customer-id}/backups/incremental}
+      last-backup-url: ${YBA_LAST_BACKUP_URL_2:${yba.base-url}/customers/${yba.customer-id}/backups?limit=1&direction=DESC}
+      job-completion-check-url: ${YBA_JOB_CHECK_URL_2:${yba.base-url}/customers/${yba.customer-id}/tasks/{taskUuid}}
       storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID_2:}
       api-token: ${YBA_API_TOKEN_2:}
       universe-uuid: ${YBA_UNIVERSE_UUID_2:}
@@ -556,9 +621,10 @@ yba:
       expiry-ms: 86400000
 
     uam-db:
-      full-backup-url: ${UAM_FULL_BACKUP_URL:}
-      incremental-backup-url: ${UAM_INCREMENTAL_BACKUP_URL:}
-      last-backup-url: ${UAM_LAST_BACKUP_URL:}
+      full-backup-url: ${UAM_FULL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups}
+      incremental-backup-url: ${UAM_INCREMENTAL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups/incremental}
+      last-backup-url: ${UAM_LAST_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups?limit=1&direction=DESC}
+      job-completion-check-url: ${UAM_JOB_CHECK_URL:${yba.base-url}/customers/${yba.customer-id}/tasks/{taskUuid}}
       storage-config-uuid: ${UAM_STORAGE_CONFIG_UUID:}
       api-token: ${UAM_API_TOKEN:}
       universe-uuid: ${UAM_UNIVERSE_UUID:}
@@ -566,12 +632,24 @@ yba:
       backup-category-type: full_backup
       db-name: ${UAM_DB_NAME:hbl_gcp_uat_epr_db}
       expiry-ms: 172800000  # 48 hours
+
+# Backup Poller Configuration
+# Note: job-completion-check-url is configured per database in yba.databases section
+backup:
+  poller:
+    enabled: ${BACKUP_POLLER_ENABLED:true}
+    initial-delay-ms: ${BACKUP_POLLER_INITIAL_DELAY_MS:5000}
+    polling-interval-ms: ${BACKUP_POLLER_INTERVAL_MS:30000}
+    thread-pool-size: ${BACKUP_POLLER_THREAD_POOL_SIZE:5}
 ```
 
 **Property Descriptions**:
+- `base-url`: Common YBA API base URL (used by all databases via variable substitution)
+- `customer-id`: Common YBA customer ID (used by all databases via variable substitution)
 - `full-backup-url`: YBA REST API endpoint for full backups
 - `incremental-backup-url`: YBA REST API endpoint for incremental backups
 - `last-backup-url`: YBA REST API endpoint to fetch last backup metadata
+- `job-completion-check-url`: YBA API endpoint template for checking job status (contains `{taskUuid}` placeholder)
 - `storage-config-uuid`: YBA storage configuration identifier
 - `api-token`: YBA API authentication token
 - `universe-uuid`: YBA universe identifier
@@ -579,6 +657,14 @@ yba:
 - `backup-category-type`: `full_backup` or `incremental_backup`
 - `db-name`: Database name for logging/tracking
 - `expiry-ms`: Backup retention period in milliseconds
+
+**Backup Poller Properties**:
+- `enabled`: Enable/disable the async backup job poller (default: true)
+- `initial-delay-ms`: Wait time before first poll after backup starts (default: 5000ms = 5 seconds)
+- `polling-interval-ms`: Interval between polling attempts (default: 30000ms = 30 seconds)
+- `thread-pool-size`: Maximum concurrent polling threads (default: 5)
+
+**Note**: The poller now supports **infinite retry** - it will continue polling until the backup job reaches a terminal state (Success, Failure, or Aborted). There is no maximum attempt limit.
 
 ### 4.3 WebClient Configuration
 

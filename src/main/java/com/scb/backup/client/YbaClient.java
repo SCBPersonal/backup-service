@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import com.scb.backup.config.YbaProperties;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
@@ -41,9 +40,6 @@ public class YbaClient {
     BackupDaoService backupDaoService;
 
     @Autowired
-    private YbaProperties props;
-
-    @Autowired
     private com.scb.backup.service.BackupPollerService backupPollerService;
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -53,14 +49,12 @@ public class YbaClient {
      * Constructor for YbaClient.
      *
      * @param webClient WebClient instance for making HTTP requests
-     * @param props YBA properties configuration
      * @param configService Service for resolving YBA dynamic configurations
      * @param backupPollerService Service for polling backup job completion
      */
-    public YbaClient(WebClient webClient, YbaProperties props, YbaConfigService configService,
+    public YbaClient(WebClient webClient, YbaConfigService configService,
                     com.scb.backup.service.BackupPollerService backupPollerService) {
         this.webClient = webClient;
-        this.props = props;
         this.configService = configService;
         this.backupPollerService = backupPollerService;
     }
@@ -129,24 +123,22 @@ public class YbaClient {
 
                         // Call incremental backup API
                         return incrementalBackup(config, baseUuid)
-                                .doOnSuccess(response -> {
-                                    // Extract task UUID from response
+                                .flatMap(response -> {
+                                    // Extract task UUID and customer UUID from response
                                     String taskUuid = extractTaskUuidFromResponse(response);
+                                    String customerUuid = config.getCustomerUuid();
 
-                                    // Insert into incremental_backup_tracker
-                                    try {
-                                        backupDaoService.insertIncrementalBackupRecord(
-                                                batchId, categoryCode, businessDate, currentMonth, baseUuid, taskUuid);
-                                        log.info("Inserted incremental backup record for batch: {}, category: {}", batchId, categoryCode);
+                                    // Insert into incremental_backup_tracker with task UUID and response in one operation
+                                    backupDaoService.insertIncrementalBackupRecord(
+                                            batchId, categoryCode, businessDate, currentMonth, baseUuid, taskUuid, response.toString());
+                                    log.info("Inserted incremental backup record with response for batch: {}, category: {}, task: {}",
+                                            batchId, categoryCode, taskUuid);
 
-                                        // Update with response
-                                        backupDaoService.updateIncrementalBackupStatus(
-                                                batchId, categoryCode, AppConstants.BACKUP_INPROGRESS_STATUS,
-                                                response.toString(), null);
-                                        log.info("Updated incremental backup response for batch: {}", batchId);
-                                    } catch (Exception e) {
-                                        log.error("Failed to update incremental backup tracker for batch: {}", batchId, e);
-                                    }
+                                    // Start reactive polling for incremental backup completion
+                                    log.info("Starting reactive polling for incremental backup task: {}", taskUuid);
+                                    return backupPollerService.pollIncrementalBackupCompletion(config, categoryCode, currentMonth,
+                                            taskUuid, customerUuid, baseUuid)
+                                            .thenReturn(response);
                                 });
                     } else {
                         log.error("No base backup UUID found in full_backup_tracker for category: {}, month: {}. " +
@@ -216,56 +208,26 @@ public class YbaClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(JsonNode.class)
-                .doOnSuccess(response -> {
+                .flatMap(response -> {
                     // Extract task UUID from response
                     String taskUuid = extractTaskUuidFromResponse(response);
                     String customerUuid = config.getCustomerUuid();
 
-                    try {
-                        // Insert into full_backup_tracker with task UUID
-                        backupDaoService.insertFullBackupRecord(
-                                batchId, categoryCode, businessDate, currentMonth, taskUuid);
-                        log.info("Inserted full backup record for batch: {}, category: {}, task: {}",
-                                batchId, categoryCode, taskUuid);
+                    // Insert into full_backup_tracker with task UUID and response in one operation
+                    backupDaoService.insertFullBackupRecord(
+                            batchId, categoryCode, businessDate, currentMonth, taskUuid, response.toString());
+                    log.info("Inserted full backup record with response for batch: {}, category: {}, task: {}",
+                            batchId, categoryCode, taskUuid);
 
-                        // Update with full backup response
-                        backupDaoService.updateFullBackupResponse(categoryCode, currentMonth, response.toString());
-                        log.info("Updated full backup response for category: {}, month: {}", categoryCode, currentMonth);
-
-                        // Start polling for job completion asynchronously in background thread
-                        String businessDateStr = (String) batchParams.get("businessDate");
-                        backupPollerService.startPolling(config, categoryCode, currentMonth,
-                                taskUuid, customerUuid, batchId, businessDateStr);
-
-                        log.info("Started async polling for task: {}", taskUuid);
-                    } catch (Exception e) {
-                        log.error("Failed to update full backup tracker or start polling for category: {}", categoryCode, e);
-                    }
+                    // Start reactive polling for job completion - stays in same Mono chain
+                    log.info("Starting reactive polling for full backup task: {}", taskUuid);
+                    return backupPollerService.pollFullBackupCompletion(config, categoryCode, currentMonth,
+                            taskUuid, customerUuid)
+                            .map(baseUuid -> {
+                                log.info("Full backup polling completed successfully with base UUID: {}", baseUuid);
+                                return response;
+                            });
                 });
-    }
-
-    /**
-     * Extracts the customer UUID from the YBA API URL.
-     *
-     * The customer UUID is part of the URL path (e.g., /api/v1/customers/{customerUuid}/backups).
-     * This method extracts it from the URL string.
-     *
-     * @param url The YBA API URL
-     * @return String containing the extracted customer UUID, or null if not found
-     */
-    private String extractCustomerUuidFromUrl(String url) {
-        if (url == null || url.isEmpty()) {
-            return null;
-        }
-
-        // Extract customer UUID from URL pattern: /customers/{customerUuid}/
-        String[] parts = url.split("/");
-        for (int i = 0; i < parts.length - 1; i++) {
-            if ("customers".equals(parts[i]) && i + 1 < parts.length) {
-                return parts[i + 1];
-            }
-        }
-        return null;
     }
 
     /**
@@ -290,38 +252,6 @@ public class YbaClient {
 
         // Try resourceUUID as fallback
         uuid = response.path("resourceUUID").asText(null);
-        return uuid;
-    }
-
-    /**
-     * Extracts the backup UUID from YBA API response.
-     *
-     * The YBA API response may contain the backup UUID in different fields depending
-     * on the API version and operation type. This method tries multiple field names
-     * in order of preference: resourceUUID, backupUUID, taskUUID.
-     *
-     * @param response JsonNode containing the YBA API response
-     * @return String containing the extracted UUID, or null if not found
-     */
-    private String extractBackupUuidFromResponse(JsonNode response) {
-        if (response == null) {
-            return null;
-        }
-
-        // Try to get resourceUUID first (common in YBA responses)
-        String uuid = response.path("resourceUUID").asText(null);
-        if (uuid != null) {
-            return uuid;
-        }
-
-        // Try backupUUID
-        uuid = response.path("backupUUID").asText(null);
-        if (uuid != null) {
-            return uuid;
-        }
-
-        // Try taskUUID as fallback
-        uuid = response.path("taskUUID").asText(null);
         return uuid;
     }
 

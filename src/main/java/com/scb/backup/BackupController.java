@@ -2,7 +2,6 @@ package com.scb.backup;
 
 import com.scb.backup.exception.DbBackupException;
 import com.hdfcbank.epricing.batch.core.lib.model.BatchStartResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StopWatch;
@@ -34,7 +33,6 @@ import com.scb.backup.service.BackupService;
  */
 @Slf4j
 @RestController
-@RequiredArgsConstructor
 public class BackupController {
 
     @Autowired

@@ -37,9 +37,11 @@ This document summarizes the implementation of the new backup tracking system us
    - Updates `full_backup_tracker` with full backup response (JSON)
 
 2. **BackupPollerService** (runs in parallel threads):
-   - Polls YBA API for job completion using task_uuid
+   - Polls YBA API for job completion using task_uuid (GET /tasks/{taskUUID})
    - When job completes successfully:
-     - Fetches base UUID from YBA API (latest backup)
+     - Fetches base UUID from YBA API using POST /backups/page (paginated request)
+     - Request includes: direction=DESC, limit=1, sortBy=createTime, filter by universeUUID
+     - Extracts baseBackupUUID from paginated response (entities[0])
      - Updates `full_backup_tracker` with:
        - base_backup_uuid
        - backup_status = 'SUCCESS'

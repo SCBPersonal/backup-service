@@ -32,7 +32,7 @@ public void startPolling(YbaDynamicConfig config, String categoryCode, String ba
 ```java
 private String checkJobStatus(YbaDynamicConfig config, String taskUuid, String customerUuid) {
     try {
-        String url = pollerProperties.getJobCompletionCheckUrl()
+        String url = pollerProperties.getJobCompletionCheckUrl()  // ❌ From global config
                 .replace("{customerUuid}", customerUuid)
                 .replace("{taskUuid}", taskUuid);
 
@@ -56,9 +56,9 @@ private String checkJobStatus(YbaDynamicConfig config, String taskUuid, String c
 **After:**
 ```java
 private Mono<String> checkJobStatus(YbaDynamicConfig config, String taskUuid, String customerUuid) {
-    String url = pollerProperties.getJobCompletionCheckUrl()
-            .replace("{customerUuid}", customerUuid)
-            .replace("{taskUuid}", taskUuid);
+    // Get job completion check URL from database-specific config
+    String url = config.getJobCompletionCheckUrl()  // ✅ From database config
+            .replace("{taskUuid}", taskUuid);  // Only taskUuid needs replacement
 
     return webClient.get()
             .uri(url)
@@ -74,6 +74,11 @@ private Mono<String> checkJobStatus(YbaDynamicConfig config, String taskUuid, St
             });
 }
 ```
+
+**Key Changes**:
+- ✅ Now reads URL from `config.getJobCompletionCheckUrl()` (database-specific)
+- ✅ Only replaces `{taskUuid}` placeholder (customer ID already in URL from YAML)
+- ✅ Removed `{customerUuid}` replacement (already resolved in application.yml)
 
 **Key Changes:**
 - ✅ Returns `Mono<String>` instead of `String`

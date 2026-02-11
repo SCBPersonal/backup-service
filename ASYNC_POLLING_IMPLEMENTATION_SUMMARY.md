@@ -31,9 +31,9 @@ backup:
     enabled: true                    # Enable/disable poller
     initial-delay-ms: 5000          # Initial delay before first poll (5 seconds)
     polling-interval-ms: 30000      # Poll every 30 seconds
-    max-poll-attempts: 120          # Max 120 attempts (1 hour with 30s interval)
     thread-pool-size: 5             # Number of concurrent polling threads
-    job-completion-check-url: /api/v1/customers/{customerUuid}/tasks/{taskUuid}
+    # Note: job-completion-check-url is now configured per database in yba.databases section
+    # Note: max-poll-attempts removed - now supports infinite retry until job completes
 ```
 
 ### 2. Application Configuration
@@ -103,26 +103,51 @@ backup:
 ## Configuration
 
 ### application.yml
-The poller configuration is already present in `application.yml`:
+The poller configuration is present in `application.yml`:
 
 ```yaml
+yba:
+  # Common YBA Configuration
+  base-url: ${YBA_BASE_URL:https://yba-api.example.com/api/v1}
+  customer-id: ${YBA_CUSTOMER_ID:cust123}
+
+  databases:
+    uam-db:
+      full-backup-url: ${UAM_FULL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups}
+      incremental-backup-url: ${UAM_INCREMENTAL_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups/incremental}
+      last-backup-url: ${UAM_LAST_BACKUP_URL:${yba.base-url}/customers/${yba.customer-id}/backups?limit=1&direction=DESC}
+      job-completion-check-url: ${UAM_JOB_CHECK_URL:${yba.base-url}/customers/${yba.customer-id}/tasks/{taskUuid}}
+      storage-config-uuid: ${UAM_STORAGE_CONFIG_UUID:}
+      api-token: ${UAM_API_TOKEN:}
+      universe-uuid: ${UAM_UNIVERSE_UUID:}
+      backup-type: PGSQL_TABLE_TYPE
+      backup-category-type: full_backup
+      db-name: ${UAM_DB_NAME:hbl_gcp_uat_epr_db}
+      expiry-ms: 172800000
+
+# Backup Poller Configuration
+# Note: job-completion-check-url is configured per database in yba.databases section
 backup:
   poller:
     enabled: ${BACKUP_POLLER_ENABLED:true}
-    initial-delay-ms: ${BACKUP_POLLER_INITIAL_DELAY:5000}
-    polling-interval-ms: ${BACKUP_POLLER_INTERVAL:30000}
-    max-poll-attempts: ${BACKUP_POLLER_MAX_ATTEMPTS:120}
-    thread-pool-size: ${BACKUP_POLLER_THREAD_POOL:5}
-    job-completion-check-url: ${YBA_JOB_STATUS_URL:/api/v1/customers/{customerUuid}/tasks/{taskUuid}}
+    initial-delay-ms: ${BACKUP_POLLER_INITIAL_DELAY_MS:5000}
+    polling-interval-ms: ${BACKUP_POLLER_INTERVAL_MS:30000}
+    thread-pool-size: ${BACKUP_POLLER_THREAD_POOL_SIZE:5}
 ```
 
 **Environment Variables**:
 - `BACKUP_POLLER_ENABLED`: Enable/disable poller (default: true)
-- `BACKUP_POLLER_INITIAL_DELAY`: Initial delay in ms (default: 5000)
-- `BACKUP_POLLER_INTERVAL`: Polling interval in ms (default: 30000)
-- `BACKUP_POLLER_MAX_ATTEMPTS`: Max attempts (default: 120 = 1 hour)
-- `BACKUP_POLLER_THREAD_POOL`: Thread pool size (default: 5)
-- `YBA_JOB_STATUS_URL`: YBA task status API endpoint
+- `BACKUP_POLLER_INITIAL_DELAY_MS`: Initial delay in ms (default: 5000)
+- `BACKUP_POLLER_INTERVAL_MS`: Polling interval in ms (default: 30000)
+- `BACKUP_POLLER_THREAD_POOL_SIZE`: Thread pool size (default: 5)
+- `YBA_BASE_URL`: YBA API base URL
+- `YBA_CUSTOMER_ID`: YBA customer ID
+- `UAM_JOB_CHECK_URL`: Job status endpoint (per database, contains `{taskUuid}` placeholder)
+
+**Important Changes**:
+- ❌ **Removed**: `max-poll-attempts` - Now supports **infinite retry** until job completes
+- ✅ **Added**: `job-completion-check-url` per database configuration
+- ✅ **Added**: Common `base-url` and `customer-id` for URL templating
 
 ### Thread Pool Configuration
 Spring Boot's default async executor is used with `@EnableAsync` annotation.

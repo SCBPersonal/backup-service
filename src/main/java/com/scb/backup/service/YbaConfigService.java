@@ -73,6 +73,7 @@ public class YbaConfigService {
                     .fullBackupUrl(dbConfig.getFullBackupUrl())
                     .incrementalBackupUrl(dbConfig.getIncrementalBackupUrl())
                     .lastBackupUrl(dbConfig.getLastBackupUrl())
+                    .jobCompletionCheckUrl(dbConfig.getJobCompletionCheckUrl())
                     .storageConfigUuid(dbConfig.getStorageConfigUuid())
                     .apiToken(dbConfig.getApiToken())
                     .universeUuid(dbConfig.getUniverseUuid())

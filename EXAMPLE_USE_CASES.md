@@ -109,9 +109,19 @@ AND backup_month = '2026-02';
 ```
 
 **3.3 Fetch Base UUID**:
-- Calls YBA API: `GET /api/v1/customers/{cUUID}/universes/{uUUID}/backups`
-- Filters for latest successful backup
-- Extracts `baseBackupUUID` from response
+- Calls YBA API: `POST /api/v1/customers/{cUUID}/universes/{uUUID}/backups/page`
+- Request body:
+```json
+{
+  "direction": "DESC",
+  "limit": 1,
+  "sortBy": "createTime",
+  "filter": {
+    "universeUUIDList": ["universe-uuid-456"]
+  }
+}
+```
+- Extracts `baseBackupUUID` from paginated response: `entities[0].backupUUID`
 
 **3.4 Update with Base UUID**:
 ```sql

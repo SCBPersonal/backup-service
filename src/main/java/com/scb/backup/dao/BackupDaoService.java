@@ -36,9 +36,6 @@ public class BackupDaoService {
     @Value("${data.insert-full-backup.query}")
     String insertFullBackup;
 
-    @Value("${data.update-full-backup-response.query}")
-    String updateFullBackupResponseQuery;
-
     @Value("${data.update-full-backup-status.query}")
     String updateFullBackupStatusQuery;
 
@@ -58,18 +55,19 @@ public class BackupDaoService {
     // ==================== FULL BACKUP TABLE OPERATIONS ====================
 
     /**
-     * Inserts a new full backup record into the full_backup_tracker table.
+     * Inserts a new full backup record into the full_backup_tracker table with response.
      *
      * @param batchId Batch execution ID
      * @param categoryCode Backup category code
      * @param businessDate Business date
      * @param backupMonth Month in YYYY-MM format
      * @param taskUuid YBA task UUID for polling
+     * @param fullBackupResponse YBA API response JSON
      * @throws DbBackupException if database operation fails
      */
     public void insertFullBackupRecord(String batchId, String categoryCode, Date businessDate,
-                                       String backupMonth, String taskUuid) {
-        log.info("Inserting full backup record for category: {}, month: {}", categoryCode, backupMonth);
+                                       String backupMonth, String taskUuid, String fullBackupResponse) {
+        log.info("Inserting full backup record with response for category: {}, month: {}", categoryCode, backupMonth);
         Map<String, Object> param = new HashMap<>();
         try {
             param.put("batchId", batchId);
@@ -78,36 +76,13 @@ public class BackupDaoService {
             param.put("backupMonth", backupMonth);
             param.put("backupStatus", AppConstants.BACKUP_INPROGRESS_STATUS);
             param.put("taskUuid", taskUuid);
+            param.put("fullBackupResponse", fullBackupResponse);
 
             jdbcTemplate.update(insertFullBackup, param);
-            log.info("Full backup record inserted successfully for category: {}", categoryCode);
+            log.info("Full backup record with response inserted successfully for category: {}", categoryCode);
         } catch (Exception e) {
             log.error("Unable to insert full backup record for category: {}", categoryCode, e);
             throw new DbBackupException("Error inserting full backup record for category: " + categoryCode, e);
-        }
-    }
-
-    /**
-     * Updates the full backup response immediately after API call.
-     *
-     * @param categoryCode Backup category code
-     * @param backupMonth Month in YYYY-MM format
-     * @param fullBackupResponse YBA API response JSON
-     * @throws DbBackupException if database operation fails
-     */
-    public void updateFullBackupResponse(String categoryCode, String backupMonth, String fullBackupResponse) {
-        log.info("Updating full backup response for category: {}, month: {}", categoryCode, backupMonth);
-        Map<String, Object> param = new HashMap<>();
-        try {
-            param.put("categoryCode", categoryCode);
-            param.put("backupMonth", backupMonth);
-            param.put("fullBackupResponse", fullBackupResponse);
-
-            jdbcTemplate.update(updateFullBackupResponseQuery, param);
-            log.info("Full backup response updated successfully for category: {}", categoryCode);
-        } catch (Exception e) {
-            log.error("Unable to update full backup response for category: {}", categoryCode, e);
-            throw new DbBackupException("Error updating full backup response for category: " + categoryCode, e);
         }
     }
 
@@ -191,7 +166,7 @@ public class BackupDaoService {
     // ==================== INCREMENTAL BACKUP TABLE OPERATIONS ====================
 
     /**
-     * Inserts a new incremental backup record into the incremental_backup_tracker table.
+     * Inserts a new incremental backup record into the incremental_backup_tracker table with response.
      *
      * @param batchId Batch execution ID
      * @param categoryCode Backup category code
@@ -199,11 +174,12 @@ public class BackupDaoService {
      * @param backupMonth Month in YYYY-MM format
      * @param baseBackupUuid Base backup UUID reference
      * @param taskUuid YBA task UUID
+     * @param backupResponse YBA API response JSON
      * @throws DbBackupException if database operation fails
      */
     public void insertIncrementalBackupRecord(String batchId, String categoryCode, Date businessDate,
-                                              String backupMonth, String baseBackupUuid, String taskUuid) {
-        log.info("Inserting incremental backup record for category: {}, base UUID: {}", categoryCode, baseBackupUuid);
+                                              String backupMonth, String baseBackupUuid, String taskUuid, String backupResponse) {
+        log.info("Inserting incremental backup record with response for category: {}, base UUID: {}", categoryCode, baseBackupUuid);
         Map<String, Object> param = new HashMap<>();
         try {
             param.put("batchId", batchId);
@@ -213,9 +189,10 @@ public class BackupDaoService {
             param.put("baseBackupUuid", baseBackupUuid);
             param.put("backupStatus", AppConstants.BACKUP_INPROGRESS_STATUS);
             param.put("taskUuid", taskUuid);
+            param.put("backupResponse", backupResponse);
 
             jdbcTemplate.update(insertIncrementalBackup, param);
-            log.info("Incremental backup record inserted successfully for category: {}", categoryCode);
+            log.info("Incremental backup record with response inserted successfully for category: {}", categoryCode);
         } catch (Exception e) {
             log.error("Unable to insert incremental backup record for category: {}", categoryCode, e);
             throw new DbBackupException("Error inserting incremental backup record for category: " + categoryCode, e);
@@ -248,6 +225,36 @@ public class BackupDaoService {
         } catch (Exception e) {
             log.error("Unable to update incremental backup status for batch: {}", batchId, e);
             throw new DbBackupException("Error updating incremental backup status for batch: " + batchId, e);
+        }
+    }
+
+    /**
+     * Updates the status of an incremental backup by category code, month, and base UUID.
+     *
+     * @param categoryCode Backup category code
+     * @param backupMonth Month in YYYY-MM format
+     * @param baseUuid Base backup UUID
+     * @param status Backup status (SUCCESS, FAILED)
+     * @param errorMessage Error message (can be null for success)
+     * @throws DbBackupException if database operation fails
+     */
+    public void updateIncrementalBackupStatusByMonth(String categoryCode, String backupMonth, String baseUuid,
+                                                     String status, String errorMessage) {
+        log.info("Updating incremental backup status for category: {}, month: {}, baseUuid: {}, status: {}",
+                categoryCode, backupMonth, baseUuid, status);
+        Map<String, Object> param = new HashMap<>();
+        try {
+            param.put("categoryCode", categoryCode);
+            param.put("backupMonth", backupMonth);
+            param.put("baseUuid", baseUuid);
+            param.put("backupStatus", status);
+            param.put("errorMessage", errorMessage);
+
+            jdbcTemplate.update(updateIncrementalBackupStatusQuery, param);
+            log.info("Incremental backup status updated successfully for category: {}, month: {}", categoryCode, backupMonth);
+        } catch (Exception e) {
+            log.error("Unable to update incremental backup status for category: {}, month: {}", categoryCode, backupMonth, e);
+            throw new DbBackupException("Error updating incremental backup status for category: " + categoryCode, e);
         }
     }
 }

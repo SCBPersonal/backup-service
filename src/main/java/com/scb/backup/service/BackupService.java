@@ -2,14 +2,11 @@ package com.scb.backup.service;
 
 import com.scb.backup.client.YbaClient;
 import com.scb.backup.dao.BackupDaoService;
-import com.scb.backup.event.BackupCompletionEvent;
 import com.scb.backup.utils.AppConstants;
 import com.scb.backup.utils.AppUtils;
 import com.hdfcbank.epricing.batch.core.lib.dao.BatchExecutionDao;
 import com.hdfcbank.epricing.batch.core.lib.service.GenericBatchService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -206,35 +203,5 @@ public class BackupService extends GenericBatchService {
         String date = batchExecutionDao.getBatchDetails(batchId, categoryCode)
                 .getId().getBatchExecutionDate();
         return AppUtils.getBusinessDate(date);
-    }
-
-    /**
-     * Event listener for backup completion events.
-     *
-     * This method is called asynchronously when BackupPollerService publishes a backup completion event.
-     * It updates the batch execution table with the final status (SUCCESS or FAILED).
-     *
-     * @param event BackupCompletionEvent containing batch details and completion status
-     */
-    @Async("backupPollerExecutor")
-    @EventListener
-    public void handleBackupCompletion(BackupCompletionEvent event) {
-        try {
-            String status = event.isSuccess() ? AppConstants.BATCH_COMPLETED_STATUS : AppConstants.BATCH_FAILED_STATUS;
-
-            log.info("Handling backup completion event for batch: {}, status: {}", event.getBatchId(), status);
-
-            // Update batch execution table
-            batchExecutionDao.updateBatchStatus(
-                event.getBatchId(),
-                status,
-                new HashMap<>(),
-                event.getBusinessDate()
-            );
-
-            log.info("Successfully updated batch execution status to {} for batch: {}", status, event.getBatchId());
-        } catch (Exception e) {
-            log.error("Error updating batch execution status for batch: {}", event.getBatchId(), e);
-        }
     }
 }
