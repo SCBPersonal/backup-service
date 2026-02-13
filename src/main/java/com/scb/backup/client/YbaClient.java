@@ -6,10 +6,11 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.scb.backup.dao.BackupDaoService;
 import com.scb.backup.model.YbaDynamicConfig;
+import com.scb.backup.service.BackupPollerService;
 import com.scb.backup.service.YbaConfigService;
 import com.scb.backup.utils.AppConstants;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -17,6 +18,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.Map;
 
 /**
@@ -31,42 +33,23 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class YbaClient {
 
-    @Autowired
-    private  WebClient webClient;
 
-    @Autowired
-    BackupDaoService backupDaoService;
-
-    @Autowired
-    private com.scb.backup.service.BackupPollerService backupPollerService;
-
+    private final WebClient webClient;
+    private final BackupDaoService backupDaoService;
+    private final BackupPollerService backupPollerService;
     private final ObjectMapper mapper = new ObjectMapper();
     private final YbaConfigService configService;
 
-    /**
-     * Constructor for YbaClient.
-     *
-     * @param webClient WebClient instance for making HTTP requests
-     * @param configService Service for resolving YBA dynamic configurations
-     * @param backupPollerService Service for polling backup job completion
-     */
-    public YbaClient(WebClient webClient, YbaConfigService configService,
-                    com.scb.backup.service.BackupPollerService backupPollerService) {
-        this.webClient = webClient;
-        this.configService = configService;
-        this.backupPollerService = backupPollerService;
-    }
 
     /**
      * Initiates a backup operation based on the category code.
-     *
      * This method determines the backup type (FULL or INCREMENTAL) from the configuration
      * and delegates to the appropriate backup method. For full backups, it stores the
      * base backup UUID in the database. For incremental backups, it validates that a
      * base backup UUID exists for the current month before proceeding.
-     *
      * @param categoryCode The backup category code (e.g., "HWA_EPR_DB_BACKUP_FULL")
      * @param batchParams Batch parameters including batch ID and business date
      * @return Mono<String> containing the YBA API response as JSON string
@@ -113,10 +96,9 @@ public class YbaClient {
     private Mono<JsonNode> performIncrementalBackup(YbaDynamicConfig config, String categoryCode, Map<String, Object> batchParams) {
         String currentMonth = getCurrentMonth();
         String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
-        java.util.Date businessDate = com.scb.backup.utils.AppUtils.toDate((String) batchParams.get("businessDate"));
-
-        return Mono.fromCallable(() -> backupDaoService.getBaseBackupUuidFromDb(categoryCode, currentMonth))
-                .flatMap(baseUuid -> {
+        Date businessDate = (Date) batchParams.get(AppConstants.BUSINESS_DATE);
+        return Mono.fromCallable(() -> backupDaoService.getBaseBackupUuidFromDb(currentMonth,config.getDbName()))
+                .flatMap(baseUuid ->  {
                     if (baseUuid != null && !baseUuid.isEmpty()) {
                         log.info("Using base backup UUID from full_backup_tracker: {} for category: {}, month: {}",
                                 baseUuid, categoryCode, currentMonth);
@@ -124,10 +106,8 @@ public class YbaClient {
                         // Call incremental backup API
                         return incrementalBackup(config, baseUuid)
                                 .flatMap(response -> {
-                                    // Extract task UUID and customer UUID from response
+                                    // Extract task UUID  response
                                     String taskUuid = extractTaskUuidFromResponse(response);
-                                    String customerUuid = config.getCustomerUuid();
-
                                     // Insert into incremental_backup_tracker with task UUID and response in one operation
                                     backupDaoService.insertIncrementalBackupRecord(
                                             batchId, categoryCode, businessDate, currentMonth, baseUuid, taskUuid, response.toString());
@@ -137,7 +117,7 @@ public class YbaClient {
                                     // Start reactive polling for incremental backup completion
                                     log.info("Starting reactive polling for incremental backup task: {}", taskUuid);
                                     return backupPollerService.pollIncrementalBackupCompletion(config, categoryCode, currentMonth,
-                                            taskUuid, customerUuid, baseUuid)
+                                            taskUuid,batchId, baseUuid)
                                             .thenReturn(response);
                                 });
                     } else {
@@ -154,10 +134,8 @@ public class YbaClient {
 
     /**
      * Gets the current month in YYYY-MM format.
-     *
      * This format is used as the key for storing and retrieving base backup UUIDs
      * on a monthly basis.
-     *
      * @return String representing current month in YYYY-MM format (e.g., "2026-02")
      */
     private String getCurrentMonth() {
@@ -181,29 +159,30 @@ public class YbaClient {
      * @return Mono<JsonNode> containing the YBA API response with backup details
      */
     private Mono<JsonNode> fullBackup(YbaDynamicConfig config, String categoryCode, Map<String, Object> batchParams)  {
+        
         String currentMonth = getCurrentMonth();
         String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
-        java.util.Date businessDate = com.scb.backup.utils.AppUtils.toDate((String) batchParams.get("businessDate"));
+        Date businessDate = (Date) batchParams.get(AppConstants.BUSINESS_DATE);
 
         ObjectNode body = mapper.createObjectNode();
-        body.put("storageConfigUUID", config.getStorageConfigUuid());
-        body.put("sse", false);
-        body.put("backupType", config.getBackupType());
-        body.put("backupCategory", "YB_CONTROLLER");
-        body.put("universeUUID", config.getUniverseUuid());
-        body.put("timeBeforeDelete", config.getExpiryMs());
-        body.put("expiryTimeUnit", "MILLISECONDS");
+        body.put(AppConstants.STORAGE_CONFIG_UUID, config.getStorageConfigUuid());
+        body.put(AppConstants.PAYLOAD_SSE, false);
+        body.put(AppConstants.BACKUPTYPE, config.getBackupType());
+        body.put(AppConstants.BACKUPCATEGORY, AppConstants.YB_CONTROLLER);
+        body.put(AppConstants.UNIVERSE_UUID, config.getUniverseUuid());
+        body.put(AppConstants.TIME_BEFORE_DELETE, config.getExpiryMs());
+        body.put(AppConstants.EXPIRY_TIME_UNIT, AppConstants.PAYLOAD_MILLISECONDS);
 
-        ArrayNode keyspaces = body.putArray("keyspaceTableList");
+        ArrayNode keyspaces = body.putArray(AppConstants.KEYSPACE_TABLE_LIST);
         ObjectNode tableNode = mapper.createObjectNode();
-        tableNode.put("keyspace", config.getDbName());
+        tableNode.put(AppConstants.KEYSPACE, config.getDbName());
         keyspaces.add(tableNode);
 
         return webClient.post()
                 .uri(config.getFullBackupUrl())
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .header("X-AUTH-YW-API-TOKEN", config.getApiToken())
+                .header(AppConstants.ACCEPT, AppConstants.APPLICATION_JSON)
+                .header(AppConstants.CONTENT_TYPE, AppConstants.APPLICATION_JSON)
+                .header(AppConstants.X_AUTH_YW_API_TOKEN, config.getApiToken())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
@@ -211,18 +190,17 @@ public class YbaClient {
                 .flatMap(response -> {
                     // Extract task UUID from response
                     String taskUuid = extractTaskUuidFromResponse(response);
-                    String customerUuid = config.getCustomerUuid();
 
                     // Insert into full_backup_tracker with task UUID and response in one operation
                     backupDaoService.insertFullBackupRecord(
-                            batchId, categoryCode, businessDate, currentMonth, taskUuid, response.toString());
+                            batchParams ,currentMonth, taskUuid, response.toString(),config.getDbName());
                     log.info("Inserted full backup record with response for batch: {}, category: {}, task: {}",
                             batchId, categoryCode, taskUuid);
 
                     // Start reactive polling for job completion - stays in same Mono chain
                     log.info("Starting reactive polling for full backup task: {}", taskUuid);
                     return backupPollerService.pollFullBackupCompletion(config, categoryCode, currentMonth,
-                            taskUuid, customerUuid)
+                            taskUuid,batchId)
                             .map(baseUuid -> {
                                 log.info("Full backup polling completed successfully with base UUID: {}", baseUuid);
                                 return response;
@@ -245,7 +223,7 @@ public class YbaClient {
         }
 
         // Try to get taskUUID first (most common for async operations)
-        String uuid = response.path("taskUUID").asText(null);
+        String uuid = response.path(AppConstants.TASKUUID).asText(null);
         if (uuid != null) {
             return uuid;
         }
@@ -268,24 +246,24 @@ public class YbaClient {
      */
     private Mono<JsonNode> incrementalBackup(YbaDynamicConfig config, String baseBackupUuid) {
         ObjectNode body = mapper.createObjectNode();
-        body.put("storageConfigUUID", config.getStorageConfigUuid());
-        body.put("sse", false);
-        body.put("backupType", config.getBackupType());
-        body.put("backupCategory", "YB_CONTROLLER");
-        body.put("universeUUID", config.getUniverseUuid());
-        body.put("baseBackupUUID", baseBackupUuid);
-       // body.put("expiryTimeUnit", "MILLISECONDS");
+        body.put(AppConstants.STORAGE_CONFIG_UUID, config.getStorageConfigUuid());
+        body.put(AppConstants.PAYLOAD_SSE, false);
+        body.put(AppConstants.BACKUPTYPE, config.getBackupType());
+        body.put(AppConstants.BACKUPCATEGORY, AppConstants.YB_CONTROLLER);
+        body.put(AppConstants.UNIVERSE_UUID, config.getUniverseUuid());
+        body.put(AppConstants.BASE_BACKUP_UUID, baseBackupUuid);
+       // body.put(AppConstants.EXPIRY_TIME_UNIT, AppConstants.PAYLOAD_MILLISECONDS);
 
-        ArrayNode arr = body.putArray("keyspaceTableList");
+        ArrayNode arr = body.putArray(AppConstants.KEYSPACE_TABLE_LIST);
         ObjectNode db = mapper.createObjectNode();
-        db.put("keyspace", config.getDbName());
+        db.put(AppConstants.KEYSPACE, config.getDbName());
         arr.add(db);
 
         return webClient.post()
                 .uri(config.getIncrementalBackupUrl())
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .header("X-AUTH-YW-API-TOKEN", config.getApiToken())
+                .header(AppConstants.ACCEPT, AppConstants.APPLICATION_JSON)
+                .header(AppConstants.CONTENT_TYPE, AppConstants.APPLICATION_JSON)
+                .header(AppConstants.X_AUTH_YW_API_TOKEN, config.getApiToken())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()

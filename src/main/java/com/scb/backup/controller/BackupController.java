@@ -1,14 +1,15 @@
-package com.scb.backup;
+package com.scb.backup.controller;
 
-import com.scb.backup.exception.DbBackupException;
 import com.hdfcbank.epricing.batch.core.lib.model.BatchStartResponse;
+import com.scb.backup.exception.DbBackupException;
+import com.scb.backup.service.BackupService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StopWatch;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
-
-import com.scb.backup.service.BackupService;
 
 /**
  * BackupController - REST API controller for database backup operations.
@@ -56,7 +57,7 @@ public class BackupController {
      * <p><b>Response Example:</b></p>
      * <pre>
      * {
-     *   "batchId": "BATCH_123",
+     *   AppConstants.BACKUP_BATCH_ID: "BATCH_123",
      *   "executionStatus": "SUCCESS",
      *   "extensionFields": {}
      * }

@@ -1,5 +1,6 @@
 package com.scb.backup.service;
 
+import com.hdfcbank.epricing.batch.core.lib.util.JPathUtils;
 import com.scb.backup.client.YbaClient;
 import com.scb.backup.dao.BackupDaoService;
 import com.scb.backup.utils.AppConstants;
@@ -51,7 +52,6 @@ import java.util.Map;
 public class BackupService extends GenericBatchService {
 
     private final YbaClient ybaClient;
-    private final BackupDaoService backupDaoService;
     private final BatchExecutionDao batchExecutionDao;
     private final BackupValidationService validationService;
 
@@ -59,14 +59,12 @@ public class BackupService extends GenericBatchService {
      * Constructor for BackupService with dependency injection.
      *
      * @param ybaClient Client for YBA API integration
-     * @param backupDaoService DAO for backup status persistence
      * @param batchExecutionDao DAO for batch framework integration
      * @param validationService Service for parameter validation
      */
-    public BackupService(YbaClient ybaClient, BackupDaoService backupDaoService,
+    public BackupService(YbaClient ybaClient,
                          BatchExecutionDao batchExecutionDao, BackupValidationService validationService) {
         this.ybaClient = ybaClient;
-        this.backupDaoService = backupDaoService;
         this.batchExecutionDao = batchExecutionDao;
         this.validationService = validationService;
     }
@@ -81,17 +79,20 @@ public class BackupService extends GenericBatchService {
      * @param batchParams Map containing batch parameters (batchId, categoryCode, businessDate)
      * @throws IllegalArgumentException if batch parameters are invalid
      */
+
     @Override
     public void process(Map<String, Object> batchParams) {
         try {
             validationService.validateBatchParams(batchParams);
 
-            String categoryCode = (String) batchParams.get(AppConstants.CATEGORY_CODE);
+            var payload = (String) batchParams.get(AppConstants.PAYLOAD);
+            String subCategoryCode= (String) JPathUtils.get(payload,AppConstants.SUB_CATEGORY_CODE);
             String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
-            String businessDate = extractBusinessDate(batchId, categoryCode);
+            String batchCategoryCode= (String) batchParams.get(AppConstants.CATEGORY_CODE);
+            String businessDate = extractBusinessDate(batchId, batchCategoryCode);
 
-            processBackup(batchId, businessDate, categoryCode)
-                    .doOnError(e -> handleProcessingError(batchId, categoryCode, businessDate, e))
+            processBackup(batchId, businessDate, subCategoryCode)
+                    .doOnError(e -> handleProcessingError(batchId, subCategoryCode, businessDate, e))
                     .subscribe();
 
         } catch (Exception e) {
@@ -117,7 +118,7 @@ public class BackupService extends GenericBatchService {
 
         return ybaClient.backupInitiate(categoryCode, batchParams)
                 .flatMap(ydbRes -> handleBackupSuccess(batchId, businessDate, ydbRes))
-                .onErrorResume(e -> handleBackupFailure(batchId, businessDate, e))
+                .onErrorResume(e -> handleBackupFailure(batchId, businessDate,categoryCode, e))
                 .then();
     }
 
@@ -180,13 +181,16 @@ public class BackupService extends GenericBatchService {
      * @param e Throwable representing the error that caused the failure
      * @return Mono&lt;Void&gt; representing the asynchronous status update operation
      */
-    private Mono<Void> handleBackupFailure(String batchId, String businessDate, Throwable e) {
+    private Mono<Void> handleBackupFailure(String batchId, String businessDate, String categoryCode,Throwable e) {
         return Mono.fromRunnable(() -> {
             log.error("Backup initiation failed for batch: {}", batchId, e);
             // Update batch execution status in batch framework
+            Map<String,Object> errorMap = new HashMap<>();
+            errorMap.put(AppConstants.ERROR_MESSAGE,e.getMessage());
+            batchExecutionDao.insertExceptionDetails(batchId,categoryCode,e.getMessage(),errorMap,businessDate);
             batchExecutionDao.updateBatchStatus(batchId, AppConstants.BATCH_FAILED_STATUS,
                     new HashMap<>(), businessDate);
-        });
+              });
     }
 
     /**

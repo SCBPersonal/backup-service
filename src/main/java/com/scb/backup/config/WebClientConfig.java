@@ -1,17 +1,26 @@
 package com.scb.backup.config;
 
+import com.hdfcbank.epricing.batch.core.lib.config.BatchConfig;
 import io.netty.channel.ChannelOption;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.web.reactive.function.client.*;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
+import javax.net.ssl.SSLException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
@@ -35,12 +44,18 @@ import java.util.concurrent.TimeUnit;
  * @see YbaProperties
  * @see WebClient
  */
-@Configuration
 @Slf4j
+@Configuration
+@EnableAsync
+@Import({ BatchConfig.class})
+@ComponentScan(basePackages = "com.hdfc.backup")
+@RequiredArgsConstructor
 public class WebClientConfig {
 
     @Autowired
     private YbaProperties ybaProperties;
+
+
 
     /**
      * Creates and configures a WebClient bean for YBA API integration.
@@ -58,7 +73,7 @@ public class WebClientConfig {
      * @return Configured WebClient instance for making HTTP requests
      */
     @Bean
-    public WebClient webClient() {
+    public WebClient webClient() throws SSLException {
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(
                         HttpClient.create()
@@ -73,29 +88,16 @@ public class WebClientConfig {
                 .build();
     }
 
-    /**
-     * Logs outgoing HTTP requests at DEBUG level.
-     *
-     * This filter logs the HTTP method and URL of each request before it's sent.
-     *
-     * @param request ClientRequest to be logged
-     * @return Mono containing the original request
-     */
+
     private Mono<ClientRequest> logRequest(ClientRequest request) {
         log.debug("Request: {} {}", request.method(), request.url());
         return Mono.just(request);
     }
 
-    /**
-     * Logs incoming HTTP responses at DEBUG level.
-     *
-     * This filter logs the HTTP status code of each response received.
-     *
-     * @param response ClientResponse to be logged
-     * @return Mono containing the original response
-     */
     private Mono<ClientResponse> logResponse(ClientResponse response) {
         log.debug("Response Status: {}", response.statusCode());
         return Mono.just(response);
     }
+
+
 }

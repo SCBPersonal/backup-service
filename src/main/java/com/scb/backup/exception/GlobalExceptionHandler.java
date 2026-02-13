@@ -50,7 +50,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<BatchStartResponse> handleFileTransferException(DbBackupException e) {
         log.error("File transfer failed due to technical error: {}", e.getMessage(), e);
         Map<String,Object> extensionFields = new HashMap<>();
-        extensionFields.put(AppConstants.ERROR_MESSAGE,AppConstants.ERROR_DETAIL);
+        extensionFields.put(AppConstants.ERROR_MESSAGE,e.getMessage());
         BatchStartResponse errorResponse = new BatchStartResponse();
         errorResponse.setExecutionStatus(AppConstants.BATCH_FAILED_STATUS);
         errorResponse.setExtensionFields(extensionFields);
