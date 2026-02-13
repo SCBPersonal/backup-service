@@ -46,7 +46,7 @@ spring:
 
 
 yba:
-  hwa-base-urls: ${YBA_BASE_URLS:https://platformuat.eprybdb.hdfcb}
+  hwa-base-urls: ${YBA_BASE_URLS:https://platformuat}
   hwa-customer-id: ${YBA_CUSTOMER_ID:asdsdsdsds}
   databases:
 
@@ -63,7 +63,7 @@ yba:
       expiry-ms: 86400000
 
     HWA_EPR_DB_BACKUP_INCRE:
-      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:https://platformuat.eprybdb.hdfcbankuat.com/api/v1/customers/8d0093b7-ac41-41f0-afca-12c49f44eddf/backups}
+      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:https://platformu/api/v1/customers/8d0093b7-ac41-41f0-afca-12c49f44eddf/backups}
       job-completion-check-url: ${YBA_JOB_STATUS_URL:${yba.hwa-base-urls}/api/v1/customers/${yba.hwa-customer-id}/tasks/{taskUuid}}
       storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID_2:d4a25962-7ec5f917f1426be}
       api-token: ${YBA_API_TOKEN_2:3.6c54f209-da71-4d89-bc0d-034a8db19547.c0e0ce5ab089-32ddf2dc1e04}
