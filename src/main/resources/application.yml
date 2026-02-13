@@ -32,9 +32,9 @@ spring:
   #        sslmode: ${DATASOURCE_SSL_MODE:disable}
   #        sslfactory: com.hdfcbank.epricing.batch.core.lib.util.CustomSslConnectionFactory
   datasource:
-    url: ${DATASOURCE_URL:jdbc:yugabytedb://10.149.86.15:5433/hbl_gcp_uat_epr_adp_db?ApplicationName=epricingHwaIntegrator&currentSchema=epricing}
-    username: ${DATASOURCE_USERNAME:epradpappuser}
-    password: ${DATASOURCE_PASSWORD:Ybdb@12345$}
+    url: ${DATASOURCE_URL:jdbc:yugabytedb://rgrgrfgfg}
+    username: ${DATASOURCE_USERNAME:wqewew}
+    password: ${DATASOURCE_PASSWORD:wedwewe$}
     driver-class-name: ${DATASOURCE_DRIVER_CLASS_NAME:com.yugabyte.Driver}
       #    hikari:
       #      maximum-pool-size: ${DATASOURCE_HIKARI_POOL_SIZE:5}
