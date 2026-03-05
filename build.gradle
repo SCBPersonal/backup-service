@@ -15,7 +15,7 @@ configurations {
     }
 }
 
-targetCompatibility = JavaVersion.VERSION_21
+targetCompatibility = JavaVersion.VERSION_23
 archivesBaseName = 'backup-orchestrator-service'
 version = '0.0.2'
 
@@ -58,7 +58,7 @@ tasks.named('test') {
 }
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = "0.8.12"
 }
 
 jacocoTestReport {

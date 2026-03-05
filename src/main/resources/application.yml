@@ -1,4 +1,5 @@
-server.port: 8989
+server:
+  port: ${PORT:10022}
 
 spring:
   main:
@@ -19,58 +20,51 @@ spring:
     activate:
       on-expression: "'${app.env}' == 'dev'"
 
-  #  datasource:
-  #    url: ${DATASOURCE_URL}
-  #    username: ${DATASOURCE_USERNAME}
-  #    password: ${DATASOURCE_PASSWORD}
-  #    driver-class-name: ${DATASOURCE_DRIVER_CLASS_NAME:com.yugabyte.Driver}
-  #    hikari:
-  #      maximum-pool-size: ${DATASOURCE_HIKARI_POOL_SIZE:5}
-  #      minimum-idle: ${HIKARI_MINIMUM_IDLE:1}
-  #      data-source-properties:
-  #        ssl: ${DATASOURCE_SSL_ENABLE:false}
-  #        sslmode: ${DATASOURCE_SSL_MODE:disable}
-  #        sslfactory: com.hdfcbank.epricing.batch.core.lib.util.CustomSslConnectionFactory
   datasource:
-    url: ${DATASOURCE_URL:jdbc:yugabytedb://rgrgrfgfg}
-    username: ${DATASOURCE_USERNAME:wqewew}
-    password: ${DATASOURCE_PASSWORD:wedwewe$}
+    url: ${DATASOURCE_URL:jdbc:jodiejfiefjef}
+    username: ${DATASOURCE_USERNAME:admin}
+    password:
     driver-class-name: ${DATASOURCE_DRIVER_CLASS_NAME:com.yugabyte.Driver}
-      #    hikari:
-      #      maximum-pool-size: ${DATASOURCE_HIKARI_POOL_SIZE:5}
-      #      minimum-idle: ${HIKARI_MINIMUM_IDLE:1}
-      #      data-source-properties:
-      #        ssl: ${DATASOURCE_SSL_ENABLE:false}
-      #        sslmode: ${DATASOURCE_SSL_MODE:disable}
-    #        sslfactory: com.hdfcbank.epricing.batch.core.lib.util.CustomSslConnectionFactory
+    hikari:
+      maximum-pool-size: ${DATASOURCE_HIKARI_POOL_SIZE:5}
+      minimum-idle: ${HIKARI_MINIMUM_IDLE:1}
+      data-source-properties:
+        ssl: ${DATASOURCE_SSL_ENABLE:true}
+        sslmode: ${DATASOURCE_SSL_MODE:verify-ca}
+        sslfactory: com.hdfcbank.epricing.batch.core.lib.util.CustomSslConnectionFactory
 
+
+
+dbSecretKey:
+dbSecretAlias: epricing
+dbSercretPass:
 
 yba:
-  hwa-base-urls: ${YBA_BASE_URLS:https://platformuat}
-  hwa-customer-id: ${YBA_CUSTOMER_ID:asdsdsdsds}
+  hwa-base-urls: ${YBA_BASE_URLS:https:lkfedkfe}
+  hwa-customer-id: ${YBA_CUSTOMER_ID:8d0093b7}
   databases:
 
     HWA_EPR_DB_BACKUP_FULL:
       full-backup-url: ${YBA_FULL_BACKUP_URL:${yba.hwa-base-urls}/api/v1/customers/${yba.hwa-customer-id}/backups}
       job-completion-check-url: ${YBA_JOB_STATUS_URL:${yba.hwa-base-urls}/api/v1/customers/${yba.hwa-customer-id}/tasks/{taskUuid}}
       last-backup-url: ${YBA_LAST_BACKUP_URL:${yba.hwa-base-urls}/api/v1/customers/${yba.hwa-customer-id}/backups/page?limit=1&direction=DESC}
-      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID:d4a25962-7ecf-4a4a-bccd-5f917f1426be}
-      api-token: ${YBA_API_TOKEN:3.6c54f209-da71-4d89-bc0d-034a8db19547.c0e0ce5a-32ddf2dcscc1e04}
-      universe-uuid: ${YBA_UNIVERSE_UUID:b055c770-a826-412}
+      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID:d4a25962-7ecf}
+      api-token: ${YBA_API_TOKEN:3.6c54f209}
+      universe-uuid: ${YBA_UNIVERSE_UUID:b055c770}
       backup-type: PGSQL_TABLE_TYPE
       backup-category-type: full_backup
       db-name: ${YBA_DB_NAME:hbl_gcp_uat_epr_db}
       expiry-ms: 86400000
 
     HWA_EPR_DB_BACKUP_INCRE:
-      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:https://platformu/api/v1/customers/8d0093b7-ac41-41f0-afca-12c49f44eddf/backups}
+      incremental-backup-url: ${YBA_INCREMENTAL_BACKUP_URL_2:${yba.hwa-base-urls}/api/v1/customers/${yba.hwa-customer-id}/backups}
       job-completion-check-url: ${YBA_JOB_STATUS_URL:${yba.hwa-base-urls}/api/v1/customers/${yba.hwa-customer-id}/tasks/{taskUuid}}
-      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID_2:d4a25962-7ec5f917f1426be}
-      api-token: ${YBA_API_TOKEN_2:3.6c54f209-da71-4d89-bc0d-034a8db19547.c0e0ce5ab089-32ddf2dc1e04}
-      universe-uuid: ${YBA_UNIVERSE_UUID_2:b055c770-a826-4120931bebf72}
+      storage-config-uuid: ${YBA_STORAGE_CONFIG_UUID:d4a25962}
+      api-token: ${YBA_API_TOKEN:3.6c54f209}
+      universe-uuid: ${YBA_UNIVERSE_UUID:b055c770}
       backup-type: PGSQL_TABLE_TYPE
       backup-category-type: incremental_backup
-      db-name: ${YBA_DB_NAME_2:hbl_gcp_uat_epr_db}
+      db-name: ${YBA_DB_NAME:hbl_gcp_uat_epr_db}
       expiry-ms: 86400000
 
     uam-db:
@@ -85,8 +79,7 @@ yba:
       db-name: ${UAM_DB_NAME:hbl_gcp_uat_epr_db}
       expiry-ms: 172800000
 
-# Backup Poller Configuration
-# Note: job-completion-check-url is configured per database in yba.databases section
+
 backup:
   poller:
     enabled: ${BACKUP_POLLER_ENABLED:true}
@@ -97,17 +90,17 @@ backup:
 data:
   # Full Backup Table Queries
   insert-full-backup:
-    query: INSERT INTO epricing.full_backup_tracker(batch_id, category_code, business_date, backup_month, backup_status, task_uuid, full_backup_response, start_time,db_name) VALUES(:batch_id, :batchCategoryCode, :businessDate, :backupMonth, :backupStatus, :taskUUID, :fullBackupResponse, CURRENT_TIMESTAMP,:dbName);
+    query: INSERT INTO epricing.full_backup_tracker(batch_id, category_code, business_date, backup_month, backup_status, task_uuid, full_backup_response, start_time,db_name) VALUES(:batch_id, :batchCategoryCode, :businessDate, :backupMonth, :backupStatus, :taskUUID, :fullBackupResponse, now(),:dbName);
 
   update-full-backup-with-base-uuid:
-    query: UPDATE epricing.full_backup_tracker SET base_backup_uuid = :baseBackupUUID, backup_status= :backupStatus, end_time = CURRENT_TIMESTAMP WHERE category_code = :categoryCode AND backup_month = :backupMonth AND batch_id = :batchId;
+    query: UPDATE epricing.full_backup_tracker SET base_backup_uuid = :baseBackupUUID, backup_status= :backupStatus, end_time = now() WHERE category_code = :categoryCode AND backup_month = :backupMonth AND batch_id = :batchId;
 
   get-base-backup-uuid-from-full-tracker:
     query: SELECT base_backup_uuid FROM epricing.full_backup_tracker WHERE backup_month = :backupMonth AND db_name = :dbName AND backup_status = 'SUCCESS' ORDER BY end_time DESC LIMIT 1;
 
   # Incremental Backup Table Queries
   insert-incremental-backup:
-    query: INSERT INTO epricing.incremental_backup_tracker(batch_id, category_code, business_date, backup_month, base_backup_uuid, backup_status, task_uuid, incremental_backup_response, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupMonth, :baseBackupUUID, :backupStatus, :taskUUID, :backupResponse, CURRENT_TIMESTAMP);
+    query: INSERT INTO epricing.incremental_backup_tracker(batch_id, category_code, business_date, backup_month,backup_status, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupMonth,:backupStatus, now());
 
   update-incremental-backup-status:
-    query: UPDATE epricing.incremental_backup_tracker SET backup_status = :backupStatus,  end_time = CURRENT_TIMESTAMP WHERE batch_id = :batchId AND category_code = :categoryCode;
+    query: UPDATE epricing.incremental_backup_tracker SET backup_status = :backupStatus,base_backup_uuid = :baseBackupUUID,task_uuid = :taskUUID,incremental_backup_response = :backupResponse,end_time = now() WHERE batch_id = :batchId AND category_code = :categoryCode;

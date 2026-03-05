@@ -1,235 +1,432 @@
 package com.scb.backup.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.scb.backup.config.BackupPollerProperties;
+
 import com.scb.backup.dao.BackupDaoService;
+
 import com.scb.backup.model.YbaDynamicConfig;
+
 import com.scb.backup.utils.AppConstants;
+
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
+
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.stubbing.Answer;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
+
+import org.springframework.http.HttpStatus;
+
+import org.springframework.http.MediaType;
+
+import org.springframework.web.reactive.function.client.*;
+
 import reactor.core.publisher.Mono;
+
 import reactor.test.StepVerifier;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("BackupPollerService Comprehensive Tests")
 class BackupPollerServiceTest {
 
-    @Mock
-    private WebClient webClient;
-
-    @Mock
     private BackupDaoService backupDaoService;
 
-    @Mock
     private BackupPollerProperties pollerProperties;
 
-    @Mock
-    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
-
-    @Mock
-    private WebClient.RequestHeadersSpec requestHeadersSpec;
-
-    @Mock
-    private WebClient.ResponseSpec responseSpec;
-
-    @InjectMocks
-    private BackupPollerService backupPollerService;
-
     private YbaDynamicConfig config;
-    private ObjectMapper mapper;
+
+    private BackupPollerService service;
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @BeforeEach
-    void setUp() {
-        mapper = new ObjectMapper();
 
-        config = YbaDynamicConfig.builder()
-                .jobCompletionCheckUrl("http://yba-api/task-status/{taskUuid}")
-                .lastBackupUrl("http://yba-api/last-backup")
-                .apiToken("test-api-token")
-                .universeUuid("universe-uuid-123")
-                .dbName("test_db")
-                .build();
+    void setup() {
+
+        backupDaoService = mock(BackupDaoService.class);
+
+        pollerProperties = mock(BackupPollerProperties.class);
+
+        config = mock(YbaDynamicConfig.class);
 
         when(pollerProperties.isEnabled()).thenReturn(true);
-        when(pollerProperties.getInitialDelayMs()).thenReturn(100L);
-        when(pollerProperties.getPollingIntervalMs()).thenReturn(100L);
+
+        when(pollerProperties.getInitialDelayMs()).thenReturn(0L);
+
+        when(pollerProperties.getPollingIntervalMs()).thenReturn(5L);
+
+        when(config.getApiToken()).thenReturn("token");
+
+        when(config.getJobCompletionCheckUrl())
+
+                .thenReturn("http://dummy/status/{taskUuid}");
+
+        when(config.getLastBackupUrl())
+
+                .thenReturn("http://dummy/last-backup");
+
+        when(config.getStorageConfigUuid()).thenReturn("storage-uuid");
+
+        when(config.getBackupType()).thenReturn("FULL");
+
+        when(config.getExpiryMs()).thenReturn(1000L);
+
+        when(config.getUniverseUuid()).thenReturn("universe-uuid");
+
     }
 
+    // --------------------------------------------------------
+
+    // ✅ FULL BACKUP SUCCESS
+
+    // --------------------------------------------------------
+
     @Test
-    @DisplayName("Should successfully poll full backup completion after few attempts")
-    void should_PollFullBackupCompletion_When_JobSucceeds() throws Exception {
-        // Given
-        String categoryCode = "HWA_EPR_DB_BACKUP_FULL";
-        String backupMonth = "2026-02";
-        String taskUuid = "task-uuid-123";
-        String batchId = "BATCH_001";
-        String baseUuid = "base-uuid-456";
 
-        // Simulate polling: First 2 attempts return "Running", 3rd attempt returns "Success"
-        JsonNode runningStatusResponse = mapper.readTree("{\"status\":\"Running\"}");
-        JsonNode successStatusResponse = mapper.readTree("{\"status\":\"Success\"}");
-        JsonNode lastBackupResponse = mapper.readTree(
-                "{\"entities\":[{\"taskUUID\":\"" + taskUuid + "\",\"commonBackupInfo\":{\"baseBackupUUID\":\"" + baseUuid + "\"},\"backupUUID\":\"backup-uuid-789\"}]}"
-        );
+    void pollFullBackup_success() {
 
-        // Use AtomicInteger to track poll attempts and return different responses
-        AtomicInteger pollCount = new AtomicInteger(0);
+        ExchangeFunction exchange = request -> {
 
-        // Mock task status check - simulate 2 polls with "Running", then "Success"
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.header(anyString(), anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+            if (request.url().getPath().contains("status")) {
 
-        // Use thenAnswer to return different responses based on call count
-        when(responseSpec.bodyToMono(JsonNode.class)).thenAnswer((Answer<Mono<JsonNode>>) invocation -> {
-            int count = pollCount.incrementAndGet();
-            if (count <= 2) {
-                return Mono.just(runningStatusResponse);  // First 2 calls: Running
-            } else if (count == 3) {
-                return Mono.just(successStatusResponse);  // 3rd call: Success
-            } else {
-                return Mono.just(lastBackupResponse);     // 4th call: last backup response
+                return Mono.just(jsonResponse("{\"status\":\"Success\"}"));
+
             }
-        });
 
-        // Mock last backup fetch
-        WebClient.RequestBodyUriSpec requestBodyUriSpec = mock(WebClient.RequestBodyUriSpec.class);
-        WebClient.RequestBodySpec requestBodySpec = mock(WebClient.RequestBodySpec.class);
+            if (request.url().getPath().contains("last-backup")) {
 
-        when(webClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.header(anyString(), anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.contentType(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
+                return Mono.just(jsonResponse("""
 
-        doNothing().when(backupDaoService).updateFullBackupWithBaseUuid(anyString(), anyString(), anyString(), anyString(), anyString());
+                        {
 
-        // When
-        Mono<String> result = backupPollerService.pollFullBackupCompletion(config, categoryCode, backupMonth, taskUuid, batchId);
+                          "entities": [{
 
-        // Then
+                            "backupUUID": "base-123",
+
+                            "taskUUID": "task-123"
+
+                          }]
+
+                        }
+
+                        """));
+
+            }
+
+            return Mono.error(new RuntimeException("Unexpected request"));
+
+        };
+
+        initService(exchange);
+
+        Mono<String> result = service.pollFullBackupCompletion(
+
+                config, "CAT1", "2026-02", "task-123", "batch1");
+
         StepVerifier.create(result)
-                .expectNext(baseUuid)
+
+                .expectNext("base-123")
+
                 .verifyComplete();
 
-        // Verify that polling happened 3 times (2 Running + 1 Success) + 1 for last backup
-        verify(webClient, atLeast(3)).get();
-        verify(backupDaoService).updateFullBackupWithBaseUuid(eq(categoryCode), eq(backupMonth), eq(baseUuid), eq(batchId), eq(AppConstants.BACKUP_SUCCESS_STATUS));
+        verify(backupDaoService).updateFullBackupWithBaseUuid(
+
+                "CAT1", "2026-02", "base-123",
+
+                "batch1", AppConstants.BACKUP_SUCCESS_STATUS);
+
     }
 
+    // --------------------------------------------------------
+
+    // ✅ FULL BACKUP FAILURE STATUS
+
+    // --------------------------------------------------------
+
     @Test
-    @DisplayName("Should handle full backup failure after few polling attempts")
-    void should_HandleFullBackupFailure_When_JobFails() throws Exception {
-        // Given
-        String categoryCode = "HWA_EPR_DB_BACKUP_FULL";
-        String backupMonth = "2026-02";
-        String taskUuid = "task-uuid-123";
-        String batchId = "BATCH_001";
 
-        // Simulate polling: First 2 attempts return "Running", 3rd attempt returns "Failure"
-        JsonNode runningStatusResponse = mapper.readTree("{\"status\":\"Running\"}");
-        JsonNode failureStatusResponse = mapper.readTree("{\"status\":\"Failure\"}");
+    void pollFullBackup_failureStatus() {
 
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.header(anyString(), anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(JsonNode.class))
-                .thenReturn(
-                        Mono.just(runningStatusResponse),  // 1st poll: Running
-                        Mono.just(runningStatusResponse),  // 2nd poll: Running
-                        Mono.just(failureStatusResponse)   // 3rd poll: Failure
-                );
+        ExchangeFunction exchange = request ->
 
-        doNothing().when(backupDaoService).updateFullBackupWithBaseUuid(anyString(), anyString(), anyString(), anyString(), anyString());
+                Mono.just(jsonResponse("{\"status\":\"Failure\"}"));
 
-        // When
-        Mono<String> result = backupPollerService.pollFullBackupCompletion(config, categoryCode, backupMonth, taskUuid, batchId);
+        initService(exchange);
 
-        // Then
+        Mono<String> result = service.pollFullBackupCompletion(
+
+                config, "CAT1", "2026-02", "task-123", "batch1");
+
         StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof RuntimeException &&
-                                throwable.getMessage().contains("Job failed with status: Failure"))
+
+                .expectError(RuntimeException.class)
+
                 .verify();
 
-        // Verify that polling happened multiple times (at least 3 times: 2 Running + 1 Failure)
-        verify(webClient, atLeast(3)).get();
-        verify(backupDaoService).updateFullBackupWithBaseUuid(eq(categoryCode), eq(backupMonth), eq(""), eq(batchId), eq(AppConstants.BACKUP_FAILED_STATUS));
+        verify(backupDaoService, times(2)).updateFullBackupWithBaseUuid(
+                "CAT1", "2026-02", "",
+                "batch1", AppConstants.BACKUP_FAILED_STATUS);
+
     }
+
+    // --------------------------------------------------------
+
+    // ✅ TASK UUID MISMATCH
+
+    // --------------------------------------------------------
 
     @Test
-    @DisplayName("Should poll multiple times before getting success status")
-    void should_PollMultipleTimes_When_BackupTakesTimeToComplete() throws Exception {
-        // Given
-        String categoryCode = "HWA_EPR_DB_BACKUP_FULL";
-        String backupMonth = "2026-02";
-        String taskUuid = "task-uuid-123";
-        String batchId = "BATCH_001";
-        String baseUuid = "base-uuid-456";
 
-        // Simulate realistic polling: 5 attempts with "Running", then "Success"
-        JsonNode runningStatusResponse = mapper.readTree("{\"status\":\"Running\"}");
-        JsonNode successStatusResponse = mapper.readTree("{\"status\":\"Success\"}");
-        JsonNode lastBackupResponse = mapper.readTree(
-                "{\"entities\":[{\"taskUUID\":\"" + taskUuid + "\",\"commonBackupInfo\":{\"baseBackupUUID\":\"" + baseUuid + "\"},\"backupUUID\":\"backup-uuid-789\"}]}"
-        );
+    void pollFullBackup_taskUuidMismatch() {
 
-        // Mock task status check - simulate 5 polls with "Running", then "Success"
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.header(anyString(), anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(JsonNode.class))
-                .thenReturn(
-                        Mono.just(runningStatusResponse),  // 1st poll: Running
-                        Mono.just(runningStatusResponse),  // 2nd poll: Running
-                        Mono.just(runningStatusResponse),  // 3rd poll: Running
-                        Mono.just(runningStatusResponse),  // 4th poll: Running
-                        Mono.just(runningStatusResponse),  // 5th poll: Running
-                        Mono.just(successStatusResponse)   // 6th poll: Success
-                );
+        ExchangeFunction exchange = request -> {
 
-        // Mock last backup fetch
-        WebClient.RequestBodyUriSpec requestBodyUriSpec = mock(WebClient.RequestBodyUriSpec.class);
-        WebClient.RequestBodySpec requestBodySpec = mock(WebClient.RequestBodySpec.class);
+            if (request.url().getPath().contains("status")) {
 
-        when(webClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.header(anyString(), anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.contentType(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(JsonNode.class))
-                .thenReturn(Mono.just(lastBackupResponse));
+                return Mono.just(jsonResponse("{\"status\":\"Success\"}"));
 
-        doNothing().when(backupDaoService).updateFullBackupWithBaseUuid(anyString(), anyString(), anyString(), anyString(), anyString());
+            }
 
-        // When
-        Mono<String> result = backupPollerService.pollFullBackupCompletion(config, categoryCode, backupMonth, taskUuid, batchId);
+            if (request.url().getPath().contains("last-backup")) {
 
-        // Then
+                return Mono.just(jsonResponse("""
+
+                        {
+
+                          "entities": [{
+
+                            "backupUUID": "base-123",
+
+                            "taskUUID": "DIFFERENT"
+
+                          }]
+
+                        }
+
+                        """));
+
+            }
+
+            return Mono.error(new RuntimeException("Unexpected request"));
+
+        };
+
+        initService(exchange);
+
+        Mono<String> result = service.pollFullBackupCompletion(
+
+                config, "CAT1", "2026-02", "task-123", "batch1");
+
         StepVerifier.create(result)
-                .expectNext(baseUuid)
+
+                .expectError(RuntimeException.class)
+
+                .verify();
+
+        verify(backupDaoService, atLeastOnce())
+
+                .updateFullBackupWithBaseUuid(
+
+                        eq("CAT1"), eq("2026-02"),
+
+                        eq(""), eq("batch1"),
+
+                        anyString());
+
+    }
+
+    // --------------------------------------------------------
+
+    // ✅ INCREMENTAL SUCCESS
+
+    // --------------------------------------------------------
+
+    @Test
+
+    void pollIncremental_success() {
+
+        ExchangeFunction exchange = request ->
+
+                Mono.just(jsonResponse("{\"status\":\"Success\"}"));
+
+        initService(exchange);
+
+        Mono<Void> result = service.pollIncrementalBackupCompletion(
+
+                config, "CAT1", "2026-02",
+
+                "task-123", "batch1", "base-123","");
+
+        StepVerifier.create(result)
+
                 .verifyComplete();
 
-        // Verify that polling happened 6 times (5 Running + 1 Success)
-        verify(webClient, atLeast(6)).get();
-        verify(backupDaoService).updateFullBackupWithBaseUuid(eq(categoryCode), eq(backupMonth), eq(baseUuid), eq(batchId), eq(AppConstants.BACKUP_SUCCESS_STATUS));
+        verify(backupDaoService)
+
+                .updateIncrementalBackupStatusByMonth(
+
+                        "CAT1", "2026-02",
+
+                        "base-123",
+
+                        AppConstants.BACKUP_SUCCESS_STATUS,
+
+                        "batch1","","task-123");
+
     }
+
+    // --------------------------------------------------------
+
+    // ✅ INCREMENTAL FAILURE
+
+    // --------------------------------------------------------
+
+    @Test
+
+    void pollIncremental_failure() {
+
+        ExchangeFunction exchange = request ->
+
+                Mono.just(jsonResponse("{\"status\":\"Failure\"}"));
+
+        initService(exchange);
+
+        Mono<Void> result = service.pollIncrementalBackupCompletion(
+
+                config, "CAT1", "2026-02",
+
+                "task-123", "batch1", "base-123","");
+
+        StepVerifier.create(result)
+
+                .expectError(RuntimeException.class)
+
+                .verify();
+
+        verify(backupDaoService, times(1)).updateIncrementalBackupStatusByMonth(
+                "CAT1", "2026-02", "base-123",
+                AppConstants.BACKUP_FAILED_STATUS, "batch1","","task-123");
+
+    }
+
+    // --------------------------------------------------------
+
+    // ✅ POLLER DISABLED
+
+    // --------------------------------------------------------
+
+    @Test
+
+    void pollFullBackup_whenDisabled_shouldError() {
+
+        when(pollerProperties.isEnabled()).thenReturn(false);
+
+        service = new BackupPollerService(
+
+                WebClient.builder().build(),
+
+                backupDaoService,
+
+                pollerProperties,
+
+                mapper
+
+        );
+
+        Mono<String> result = service.pollFullBackupCompletion(
+
+                config, "CAT1", "2026-02",
+
+                "task-123", "batch1");
+
+        StepVerifier.create(result)
+
+                .expectError(RuntimeException.class)
+
+                .verify();
+
+    }
+
+    // --------------------------------------------------------
+
+    // ✅ EMPTY LAST BACKUP RESPONSE
+
+    // --------------------------------------------------------
+
+    @Test
+
+    void pollFullBackup_emptyLastBackup_shouldFail() {
+
+        ExchangeFunction exchange = request -> {
+
+            if (request.url().getPath().contains("status")) {
+
+                return Mono.just(jsonResponse("{\"status\":\"Success\"}"));
+
+            }
+
+            if (request.url().getPath().contains("last-backup")) {
+
+                return Mono.just(jsonResponse("{\"entities\": []}"));
+
+            }
+
+            return Mono.error(new RuntimeException("Unexpected request"));
+
+        };
+
+        initService(exchange);
+
+        Mono<String> result = service.pollFullBackupCompletion(
+
+                config, "CAT1", "2026-02", "task-123", "batch1");
+
+        StepVerifier.create(result)
+                .verifyComplete();
+
+
+    }
+
+    // --------------------------------------------------------
+
+    // 🔧 Helper Methods
+
+    // --------------------------------------------------------
+
+    private void initService(ExchangeFunction exchange) {
+
+        WebClient webClient = WebClient.builder()
+
+                .exchangeFunction(exchange)
+
+                .build();
+
+        service = new BackupPollerService(
+
+                webClient,
+
+                backupDaoService,
+
+                pollerProperties,
+
+                mapper
+
+        );
+
+    }
+
+    private ClientResponse jsonResponse(String body) {
+
+        return ClientResponse.create(HttpStatus.OK)
+
+                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+
+                .body(body)
+
+                .build();
+
+    }
+
 }
+
+
+

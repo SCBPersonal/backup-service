@@ -74,9 +74,14 @@ public class WebClientConfig {
      */
     @Bean
     public WebClient webClient() throws SSLException {
+
+        SslContext sslContext = SslContextBuilder.forClient()
+                .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                .build();
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(
                         HttpClient.create()
+                                .secure(sslSpec -> sslSpec.sslContext(sslContext))
                                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, ybaProperties.getConnectionTimeout())
                                 .responseTimeout(Duration.ofMillis(ybaProperties.getReadTimeout()))
                                 .doOnConnected(conn ->

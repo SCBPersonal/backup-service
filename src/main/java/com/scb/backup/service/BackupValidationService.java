@@ -1,5 +1,7 @@
 package com.scb.backup.service;
 
+import com.scb.backup.model.YbaDynamicConfig;
+import com.scb.backup.utils.AppConstants;
 import io.micrometer.common.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,8 +45,8 @@ public class BackupValidationService {
             throw new IllegalArgumentException("Batch parameters cannot be null or empty");
         }
 
-        validateRequiredParam(batchParams, com.scb.backup.utils.AppConstants.BATCH_ID, "Batch ID");
-        validateRequiredParam(batchParams, com.scb.backup.utils.AppConstants.CATEGORY_CODE, "Category code");
+        validateRequiredParam(batchParams, AppConstants.BATCH_ID, "Batch ID");
+        validateRequiredParam(batchParams, AppConstants.CATEGORY_CODE, "Category code");
     }
 
     /**
@@ -57,7 +59,7 @@ public class BackupValidationService {
      * @param categoryCode Backup category code for error messaging
      * @throws IllegalArgumentException if configuration is null or missing required fields
      */
-    public void validateBackupConfig(com.scb.backup.model.YbaDynamicConfig config, String categoryCode) {
+    void validateBackupConfig(YbaDynamicConfig config, String categoryCode) {
         if (config == null) {
             throw new IllegalArgumentException("No backup configuration found for category: " + categoryCode);
         }

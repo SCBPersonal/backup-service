@@ -1,5 +1,7 @@
 package com.scb.backup.exception;
 
+import lombok.RequiredArgsConstructor;
+
 /**
  * DbBackupException - Custom runtime exception for database backup operations.
  *
@@ -15,6 +17,7 @@ package com.scb.backup.exception;
  * @since 2026-02-04
  * @see GlobalExceptionHandler
  */
+@RequiredArgsConstructor
 public class DbBackupException extends RuntimeException{
 
     /**
@@ -26,5 +29,6 @@ public class DbBackupException extends RuntimeException{
     public DbBackupException(String message, Throwable cause) {
         super(message, cause);
     }
+
 
 }

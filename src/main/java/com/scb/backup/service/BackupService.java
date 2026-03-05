@@ -1,10 +1,10 @@
 package com.scb.backup.service;
 
-import com.hdfcbank.epricing.batch.core.lib.util.JPathUtils;
 import com.scb.backup.client.YbaClient;
+import com.scb.backup.utils.AppUtils;
+import com.hdfcbank.epricing.batch.core.lib.util.JPathUtils;
 import com.scb.backup.dao.BackupDaoService;
 import com.scb.backup.utils.AppConstants;
-import com.scb.backup.utils.AppUtils;
 import com.hdfcbank.epricing.batch.core.lib.dao.BatchExecutionDao;
 import com.hdfcbank.epricing.batch.core.lib.service.GenericBatchService;
 import lombok.extern.slf4j.Slf4j;

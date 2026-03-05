@@ -97,6 +97,9 @@ public class YbaClient {
         String currentMonth = getCurrentMonth();
         String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
         Date businessDate = (Date) batchParams.get(AppConstants.BUSINESS_DATE);
+        backupDaoService.insertIncrementalBackupRecord(
+                batchId, categoryCode, businessDate, currentMonth);
+
         return Mono.fromCallable(() -> backupDaoService.getBaseBackupUuidFromDb(currentMonth,config.getDbName()))
                 .flatMap(baseUuid ->  {
                     if (baseUuid != null && !baseUuid.isEmpty()) {
@@ -109,21 +112,21 @@ public class YbaClient {
                                     // Extract task UUID  response
                                     String taskUuid = extractTaskUuidFromResponse(response);
                                     // Insert into incremental_backup_tracker with task UUID and response in one operation
-                                    backupDaoService.insertIncrementalBackupRecord(
-                                            batchId, categoryCode, businessDate, currentMonth, baseUuid, taskUuid, response.toString());
-                                    log.info("Inserted incremental backup record with response for batch: {}, category: {}, task: {}",
+                                          log.info("Inserted incremental backup record with response for batch: {}, category: {}, task: {}",
                                             batchId, categoryCode, taskUuid);
 
                                     // Start reactive polling for incremental backup completion
                                     log.info("Starting reactive polling for incremental backup task: {}", taskUuid);
                                     return backupPollerService.pollIncrementalBackupCompletion(config, categoryCode, currentMonth,
-                                            taskUuid,batchId, baseUuid)
+                                            taskUuid,batchId, baseUuid,response.toString())
                                             .thenReturn(response);
                                 });
                     } else {
                         log.error("No base backup UUID found in full_backup_tracker for category: {}, month: {}. " +
                                 "A full backup must be performed first for the current month before incremental backup can proceed.",
                                 categoryCode, currentMonth);
+                        backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, currentMonth,"",
+                                AppConstants.BACKUP_FAILED_STATUS,batchId,"","");
                         return Mono.error(new IllegalStateException(
                                 String.format("Base backup UUID not found for category '%s' and month '%s'. " +
                                         "Please perform a full backup first for the current month.",
@@ -162,7 +165,7 @@ public class YbaClient {
         
         String currentMonth = getCurrentMonth();
         String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
-        Date businessDate = (Date) batchParams.get(AppConstants.BUSINESS_DATE);
+
 
         ObjectNode body = mapper.createObjectNode();
         body.put(AppConstants.STORAGE_CONFIG_UUID, config.getStorageConfigUuid());
@@ -252,7 +255,7 @@ public class YbaClient {
         body.put(AppConstants.BACKUPCATEGORY, AppConstants.YB_CONTROLLER);
         body.put(AppConstants.UNIVERSE_UUID, config.getUniverseUuid());
         body.put(AppConstants.BASE_BACKUP_UUID, baseBackupUuid);
-       // body.put(AppConstants.EXPIRY_TIME_UNIT, AppConstants.PAYLOAD_MILLISECONDS);
+
 
         ArrayNode arr = body.putArray(AppConstants.KEYSPACE_TABLE_LIST);
         ObjectNode db = mapper.createObjectNode();

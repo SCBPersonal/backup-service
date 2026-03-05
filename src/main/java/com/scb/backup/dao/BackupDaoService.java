@@ -8,8 +8,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -142,24 +140,19 @@ public class BackupDaoService {
      * @param categoryCode Backup category code
      * @param businessDate Business date
      * @param backupMonth Month in YYYY-MM format
-     * @param baseBackupUuid Base backup UUID reference
-     * @param taskUuid YBA task UUID
-     * @param backupResponse YBA API response JSON
      * @throws DbBackupException if database operation fails
      */
     public void insertIncrementalBackupRecord(String batchId, String categoryCode, Date businessDate,
-                                              String backupMonth, String baseBackupUuid, String taskUuid, String backupResponse) {
-        log.info("Inserting incremental backup record with response for category: {}, base UUID: {}", categoryCode, baseBackupUuid);
+                                              String backupMonth) {
+        log.info("Inserting incremental backup record with response for category: {}, base UUID: {}", categoryCode);
         Map<String, Object> param = new HashMap<>();
         try {
             param.put(AppConstants.BACKUP_BATCH_ID, batchId);
             param.put(AppConstants.CATEGORY, categoryCode);
             param.put(AppConstants.BUSINESS_DATE, new java.sql.Date(businessDate.getTime()));
             param.put(AppConstants.BACKUP_MONTH, backupMonth);
-            param.put(AppConstants.BASE_BACKUP_UUID, baseBackupUuid);
             param.put(AppConstants.BACKUP_STATUS, AppConstants.BACKUP_INPROGRESS_STATUS);
-            param.put(AppConstants.TASKUUID, taskUuid);
-            param.put(AppConstants.BACKUP_RESPONSE, backupResponse);
+
 
             jdbcTemplate.update(insertIncrementalBackup, param);
             log.info("Incremental backup record with response inserted successfully for category: {}", categoryCode);
@@ -177,19 +170,22 @@ public class BackupDaoService {
      * @param backupMonth Month in YYYY-MM format
      * @param baseUuid Base backup UUID
      * @param status Backup status (SUCCESS, FAILED)
+     * @param taskUuid
      * @throws DbBackupException if database operation fails
      */
     public void updateIncrementalBackupStatusByMonth(String categoryCode, String backupMonth, String baseUuid,
-                                                     String status,String batchId) {
+                                                     String status, String batchId, String response, String taskUuid) {
         log.info("Updating incremental backup status for category: {}, month: {}, baseUuid: {}, status: {}",
                 categoryCode, backupMonth, baseUuid, status);
         Map<String, Object> param = new HashMap<>();
         try {
             param.put(AppConstants.CATEGORY, categoryCode);
             param.put(AppConstants.BACKUP_MONTH, backupMonth);
-            param.put(AppConstants.BASEUUID, baseUuid);
+            param.put(AppConstants.BASE_BACKUP_UUID, baseUuid);
             param.put(AppConstants.BACKUP_STATUS, status);
             param.put(AppConstants.BACKUP_BATCH_ID,batchId);
+            param.put(AppConstants.TASKUUID,taskUuid);
+            param.put(AppConstants.BACKUP_RESPONSE,response);
 
             jdbcTemplate.update(updateIncrementalBackupStatusQuery, param);
             log.info("Incremental backup status updated successfully for category: {}, month: {}", categoryCode, backupMonth);

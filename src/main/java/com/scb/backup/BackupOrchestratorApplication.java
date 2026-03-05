@@ -1,7 +1,8 @@
 package com.scb.backup;
 
-import org.springframework.boot.SpringApplication;
+import com.hdfcbank.epricing.batch.core.lib.util.SSLContextInitializer;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.scheduling.annotation.EnableAsync;
 
 /**
@@ -33,7 +34,12 @@ public class BackupOrchestratorApplication {
      *
      * @param args Command line arguments
      */
+
     public static void main(String[] args) {
-        SpringApplication.run(BackupOrchestratorApplication.class, args);
+        SpringApplicationBuilder builder = new SpringApplicationBuilder(BackupOrchestratorApplication.class);
+
+        builder.initializers(new SSLContextInitializer());
+
+        builder.run(args);
     }
 }

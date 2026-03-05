@@ -1,5 +1,7 @@
 package com.scb.backup.model;
 
+import com.scb.backup.config.YbaProperties;
+import com.scb.backup.service.YbaConfigService;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,13 +15,13 @@ import lombok.NoArgsConstructor;
  * authentication tokens, API endpoints, and backup parameters.
  *
  * <p>Instances of this class are created from application.yml configuration and
- * managed by {@link com.scb.backup.service.YbaConfigService}.</p>
+ * managed by {@link YbaConfigService}.</p>
  *
  * @author SCB ePricing Team
  * @version 2.0
  * @since 2026-02-04
- * @see com.scb.backup.config.YbaProperties
- * @see com.scb.backup.service.YbaConfigService
+ * @see YbaProperties
+ * @see YbaConfigService
  */
 @Data
 @Builder

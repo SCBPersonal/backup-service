@@ -1,12 +1,9 @@
 package com.scb.backup.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.scb.backup.config.YbaProperties;
 import com.scb.backup.model.YbaDynamicConfig;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
-
-import com.scb.backup.config.YbaProperties;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -43,7 +40,6 @@ import java.util.Map;
 public class YbaConfigService {
 
     private final YbaProperties props;
-    private final ObjectMapper mapper = new ObjectMapper();
     private Map<String, YbaDynamicConfig> configMap;
 
     /**

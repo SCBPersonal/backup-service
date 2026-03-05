@@ -67,7 +67,7 @@ public class BackupPollerService {
      * @return Mono<String> containing the base UUID on success, or error on failure
      */
     public Mono<String> pollFullBackupCompletion(YbaDynamicConfig config, String categoryCode, String backupMonth,
-                                                  String taskUuid,String batchId) {
+                                                 String taskUuid, String batchId) {
         if (!pollerProperties.isEnabled()) {
             log.info("Backup poller is disabled. Skipping polling for task: {}", taskUuid);
             return Mono.error(new RuntimeException("Backup poller is disabled"));
@@ -108,7 +108,7 @@ public class BackupPollerService {
      * @return Mono<Void> that completes when polling finishes
      */
     public Mono<Void> pollIncrementalBackupCompletion(YbaDynamicConfig config, String categoryCode, String backupMonth,
-                                                       String taskUuid,String batchId, String baseUuid) {
+                                                       String taskUuid,String batchId, String baseUuid,String response) {
         if (!pollerProperties.isEnabled()) {
             log.info("Backup poller is disabled. Skipping polling for task: {}", taskUuid);
             return Mono.error(new RuntimeException("Backup poller is disabled"));
@@ -121,16 +121,16 @@ public class BackupPollerService {
                 .flatMap(jobStatus -> {
                     if (AppConstants.BACKUP_POLLING_STATUS.equalsIgnoreCase(jobStatus)) {
                         log.info("Incremental backup job completed successfully for task: {}", taskUuid);
-                        return handleIncrementalBackupSuccess(categoryCode, backupMonth, baseUuid,batchId);
+                        return handleIncrementalBackupSuccess(categoryCode, backupMonth, baseUuid,batchId,response,taskUuid);
                     } else {
                         log.error("Incremental backup job failed for task: {}, status: {}", taskUuid, jobStatus);
-                        return handleIncrementalBackupFailure(categoryCode, backupMonth, baseUuid, "Job failed with status: " + jobStatus,batchId);
+                        return handleIncrementalBackupFailure(categoryCode, backupMonth, baseUuid ,batchId,response,taskUuid);
                     }
                 })
                 .doOnError(error -> {
                     log.error("Error during incremental backup polling for task: {}", taskUuid, error);
                     backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, backupMonth, baseUuid,
-                            AppConstants.BACKUP_FAILED_STATUS,batchId);
+                            AppConstants.BACKUP_FAILED_STATUS,batchId,"", taskUuid);
                 });
     }
 
@@ -144,7 +144,7 @@ public class BackupPollerService {
      * @param taskUuid Task UUID to check
      * @return Mono of final job status string (e.g., "Success", "Failure", "Aborted")
      */
-    private Mono<String> pollJobStatusWithRetry(YbaDynamicConfig config, String taskUuid) {
+    Mono<String> pollJobStatusWithRetry(YbaDynamicConfig config, String taskUuid) {
         return checkJobStatus(config, taskUuid)
                 .flatMap(status -> {
                     if (AppConstants.BACKUP_POLLING_STATUS.equalsIgnoreCase(status) ||
@@ -260,10 +260,10 @@ public class BackupPollerService {
      *
      * @return Mono<Void> that completes when update is done
      */
-    private Mono<Void> handleIncrementalBackupSuccess(String categoryCode, String backupMonth, String baseUuid,String batchId) {
+    private Mono<Void> handleIncrementalBackupSuccess(String categoryCode, String backupMonth, String baseUuid, String batchId, String response, String taskUuid) {
         return Mono.fromRunnable(() -> {
             backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, backupMonth, baseUuid,
-                    AppConstants.BACKUP_SUCCESS_STATUS,batchId);
+                    AppConstants.BACKUP_SUCCESS_STATUS,batchId,response,taskUuid);
             log.info("Successfully updated incremental backup status to SUCCESS for category: {}, baseUuid: {}",
                     categoryCode, baseUuid);
         });
@@ -275,9 +275,9 @@ public class BackupPollerService {
      *
      * @return Mono<Void> that errors with the failure message
      */
-    private Mono<Void> handleIncrementalBackupFailure(String categoryCode, String backupMonth, String baseUuid, String errorMessage,String batchId) {
+    private Mono<Void> handleIncrementalBackupFailure(String categoryCode, String backupMonth, String baseUuid, String errorMessage, String batchId, String taskUuid) {
         backupDaoService.updateIncrementalBackupStatusByMonth(categoryCode, backupMonth, baseUuid,
-                AppConstants.BACKUP_FAILED_STATUS,batchId);
+                AppConstants.BACKUP_FAILED_STATUS,batchId,"",taskUuid);
         log.info("Updated incremental backup status to FAILED for category: {}", categoryCode);
         return Mono.error(new RuntimeException(errorMessage));
     }
@@ -291,7 +291,7 @@ public class BackupPollerService {
      * @param config YBA configuration
      * @return Mono<Map<String, String>> containing both "baseUuid" and "taskUuid", or empty if not found
      */
-    private Mono<Map<String, String>> fetchLastBackupDetailsReactive(YbaDynamicConfig config) {
+    Mono<Map<String, String>> fetchLastBackupDetailsReactive(YbaDynamicConfig config) {
         // Create request body for pagination - get latest backup
         ObjectNode requestBody = mapper.createObjectNode();
         requestBody.put(AppConstants.STORAGE_CONFIG_UUID, config.getStorageConfigUuid());
@@ -334,7 +334,7 @@ public class BackupPollerService {
      * @param response JsonNode containing the paginated last backup API response
      * @return Map containing "baseUuid" and "taskUuid", or null if not found
      */
-    private Map<String, String> extractBackupDetailsFromLastBackup(JsonNode response) {
+    Map<String, String> extractBackupDetailsFromLastBackup(JsonNode response) {
         if (response == null) {
             return null;
         }
