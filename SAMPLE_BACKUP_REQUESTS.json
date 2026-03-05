@@ -1,0 +1,192 @@
+{
+  "description": "Sample JSON requests for testing configurable backup frequency feature",
+  "note": "The system automatically calculates the backup period based on the frequency configuration in application.yml",
+  
+  "samples": {
+    
+    "1_monthly_full_backup": {
+      "description": "Full backup request for MONTHLY frequency (March 2026)",
+      "expected_period": "2026-03",
+      "request": {
+        "batchId": "BATCH_20260301_001",
+        "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260301",
+        "payload": {
+          "backupType": "FULL",
+          "frequencyType": "MONTHLY"
+        }
+      },
+      "expected_database_record": {
+        "batch_id": "BATCH_20260301_001",
+        "category_code": "HWA_EPR_DB_BACKUP_FULL",
+        "backup_month": "2026-03",
+        "backup_status": "IN_PROGRESS",
+        "note": "backup_month stores the calculated period in YYYY-MM format"
+      }
+    },
+    
+    "2_monthly_incremental_backup": {
+      "description": "Incremental backup request for MONTHLY frequency (March 15, 2026)",
+      "expected_period": "2026-03",
+      "request": {
+        "batchId": "BATCH_20260315_002",
+        "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260315",
+        "payload": {
+          "backupType": "INCREMENTAL",
+          "frequencyType": "MONTHLY"
+        }
+      },
+      "expected_behavior": {
+        "period_calculated": "2026-03",
+        "query_executed": "SELECT base_backup_uuid FROM full_backup_tracker WHERE backup_month = '2026-03'",
+        "base_uuid_from": "Full backup created on 2026-03-01",
+        "database_record": {
+          "batch_id": "BATCH_20260315_002",
+          "category_code": "HWA_EPR_DB_BACKUP_FULL",
+          "backup_month": "2026-03",
+          "base_backup_uuid": "uuid-from-march-1-full-backup"
+        }
+      }
+    },
+    
+    "3_weekly_full_backup": {
+      "description": "Full backup request for WEEKLY frequency (Monday, March 9, 2026 - Week 11)",
+      "expected_period": "2026-W11",
+      "request": {
+        "batchId": "BATCH_20260309_W11",
+        "batchCategoryCode": "UAM_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260309",
+        "payload": {
+          "backupType": "FULL",
+          "frequencyType": "WEEKLY"
+        }
+      },
+      "expected_database_record": {
+        "batch_id": "BATCH_20260309_W11",
+        "category_code": "UAM_DB_BACKUP_FULL",
+        "backup_month": "2026-W11",
+        "backup_status": "IN_PROGRESS",
+        "note": "backup_month stores the calculated period in YYYY-Www format (ISO week)"
+      }
+    },
+    
+    "4_weekly_incremental_backup": {
+      "description": "Incremental backup request for WEEKLY frequency (Thursday, March 12, 2026 - Week 11)",
+      "expected_period": "2026-W11",
+      "request": {
+        "batchId": "BATCH_20260312_W11_INC",
+        "batchCategoryCode": "UAM_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260312",
+        "payload": {
+          "backupType": "INCREMENTAL",
+          "frequencyType": "WEEKLY"
+        }
+      },
+      "expected_behavior": {
+        "period_calculated": "2026-W11",
+        "query_executed": "SELECT base_backup_uuid FROM full_backup_tracker WHERE backup_month = '2026-W11'",
+        "base_uuid_from": "Full backup created on 2026-03-09 (Monday, Week 11)",
+        "database_record": {
+          "batch_id": "BATCH_20260312_W11_INC",
+          "category_code": "UAM_DB_BACKUP_FULL",
+          "backup_month": "2026-W11",
+          "base_backup_uuid": "uuid-from-week11-full-backup"
+        }
+      }
+    },
+    
+    "5_weekly_new_week_full_backup": {
+      "description": "Full backup request for WEEKLY frequency (Monday, March 16, 2026 - Week 12 - NEW WEEK)",
+      "expected_period": "2026-W12",
+      "request": {
+        "batchId": "BATCH_20260316_W12",
+        "batchCategoryCode": "UAM_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260316",
+        "payload": {
+          "backupType": "FULL",
+          "frequencyType": "WEEKLY"
+        }
+      },
+      "expected_database_record": {
+        "batch_id": "BATCH_20260316_W12",
+        "category_code": "UAM_DB_BACKUP_FULL",
+        "backup_month": "2026-W12",
+        "backup_status": "IN_PROGRESS",
+        "note": "NEW period 2026-W12 - creates a NEW full backup for the new week"
+      }
+    },
+    
+    "6_custom_10day_full_backup": {
+      "description": "Full backup request for CUSTOM frequency (March 11, 2026 - Start of 10-day interval)",
+      "expected_period": "2026-03-11",
+      "request": {
+        "batchId": "BATCH_20260311_D11",
+        "batchCategoryCode": "COMPLIANCE_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260311",
+        "payload": {
+          "backupType": "FULL",
+          "frequencyType": "CUSTOM",
+          "intervalDays": 10
+        }
+      },
+      "expected_database_record": {
+        "batch_id": "BATCH_20260311_D11",
+        "category_code": "COMPLIANCE_DB_BACKUP_FULL",
+        "backup_month": "2026-03-11",
+        "backup_status": "IN_PROGRESS",
+        "note": "backup_month stores the calculated period in YYYY-MM-DD format (interval start date)"
+      }
+    },
+    
+    "7_custom_10day_incremental_backup": {
+      "description": "Incremental backup request for CUSTOM frequency (March 15, 2026 - Within 10-day interval)",
+      "expected_period": "2026-03-11",
+      "request": {
+        "batchId": "BATCH_20260315_D11_INC",
+        "batchCategoryCode": "COMPLIANCE_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260315",
+        "payload": {
+          "backupType": "INCREMENTAL",
+          "frequencyType": "CUSTOM",
+          "intervalDays": 10
+        }
+      },
+      "expected_behavior": {
+        "period_calculated": "2026-03-11",
+        "calculation_logic": "March 15 falls in days 71-80 interval (starting from 2026-01-01 epoch)",
+        "query_executed": "SELECT base_backup_uuid FROM full_backup_tracker WHERE backup_month = '2026-03-11'",
+        "base_uuid_from": "Full backup created on 2026-03-11",
+        "database_record": {
+          "batch_id": "BATCH_20260315_D11_INC",
+          "category_code": "COMPLIANCE_DB_BACKUP_FULL",
+          "backup_month": "2026-03-11",
+          "base_backup_uuid": "uuid-from-march11-full-backup"
+        }
+      }
+    },
+    
+    "8_custom_10day_new_interval_full_backup": {
+      "description": "Full backup request for CUSTOM frequency (March 21, 2026 - NEW 10-day interval)",
+      "expected_period": "2026-03-21",
+      "request": {
+        "batchId": "BATCH_20260321_D21",
+        "batchCategoryCode": "COMPLIANCE_DB_BACKUP_FULL",
+        "batchTransactionDate": "20260321",
+        "payload": {
+          "backupType": "FULL",
+          "frequencyType": "CUSTOM",
+          "intervalDays": 10
+        }
+      },
+      "expected_database_record": {
+        "batch_id": "BATCH_20260321_D21",
+        "category_code": "COMPLIANCE_DB_BACKUP_FULL",
+        "backup_month": "2026-03-21",
+        "backup_status": "IN_PROGRESS",
+        "note": "NEW period 2026-03-21 - creates a NEW full backup for the new 10-day interval"
+      }
+    }
+  }
+}
+

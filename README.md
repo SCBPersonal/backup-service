@@ -7,11 +7,14 @@ The **Backup Orchestrator Service** is a Spring Boot-based microservice that orc
 ## Key Features
 
 - ✅ Automated full and incremental backup orchestration
+- ✅ **Single parameter backup frequency** - Simplified API with `backupFrequency` parameter
+- ✅ **Flexible backup intervals** - MONTHLY, WEEKLY, or custom intervals (10_DAYS, 15_DAYS, etc.)
 - ✅ Multi-database configuration support
 - ✅ Real-time backup status tracking
 - ✅ Integration with YugabyteDB Anywhere (YBA) API
 - ✅ Reactive programming with Spring WebFlux
 - ✅ Comprehensive error handling and validation
+- ✅ **80%+ test coverage** - Comprehensive test suite with 87+ tests
 
 ## Technology Stack
 
@@ -144,13 +147,61 @@ yba:
 
 ### Backup Request
 
+**Single Parameter Approach** - Use `backupFrequency` to specify backup interval:
+
 ```json
 POST /backupProcess
 Content-Type: application/json
 
 {
   "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
-  "batchTransactionDate": "20250114"
+  "batchTransactionDate": "20250114",
+  "batchCategoryParameters": {
+    "backupType": "FULL",
+    "backupFrequency": "MONTHLY"
+  }
+}
+```
+
+**Supported Backup Frequencies**:
+- `MONTHLY` - Monthly backups (format: yyyy-MM)
+- `WEEKLY` - Weekly backups (format: yyyy-'W'ww)
+- `10_DAYS` - Every 10 days (format: yyyy-MM-dd)
+- `15_DAYS` - Every 15 days (format: yyyy-MM-dd)
+- `20_DAYS` - Every 20 days (format: yyyy-MM-dd)
+- Any custom interval: `{N}_DAYS` where N is the number of days
+
+**Examples**:
+
+```json
+// Monthly Backup
+{
+  "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+  "batchTransactionDate": "20260315",
+  "batchCategoryParameters": {
+    "backupType": "FULL",
+    "backupFrequency": "MONTHLY"
+  }
+}
+
+// Weekly Backup
+{
+  "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+  "batchTransactionDate": "20260315",
+  "batchCategoryParameters": {
+    "backupType": "FULL",
+    "backupFrequency": "WEEKLY"
+  }
+}
+
+// Custom 10-Day Interval
+{
+  "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+  "batchTransactionDate": "20260315",
+  "batchCategoryParameters": {
+    "backupType": "FULL",
+    "backupFrequency": "10_DAYS"
+  }
 }
 ```
 

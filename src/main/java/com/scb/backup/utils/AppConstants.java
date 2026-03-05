@@ -9,7 +9,7 @@ public class AppConstants {
     public static final String BATCH_COMPLETED_STATUS = "COMPLETED";
     public static final String BATCH_FAILED_STATUS = "FAILED";
     public static final String CATEGORY = "categoryCode";
-    public static final String BACKUP_MONTH = "backupMonth";
+    public static final String BACKUP_PERIOD = "backupPeriod";
     public static final String BACKUP_STATUS = "backupStatus";
     public static final String BACKUP_RESPONSE = "backupResponse";
     public static final String BACKUP_BATCH_ID = "batchId";
@@ -59,4 +59,5 @@ public class AppConstants {
     public static final String KEYSPACE = "keyspace";
     public static final String KEYSPACE_TABLE_LIST = "keyspaceTableList";
     public static final String DATABASE_NAME = "dbName";
+    public static final String BACKUP_FREQUENCY = "backupFrequency";
 }

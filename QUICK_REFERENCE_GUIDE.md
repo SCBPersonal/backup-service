@@ -13,16 +13,28 @@
 ## API Endpoints
 
 ### Trigger Backup
+
+**Single Parameter Approach** - Use `backupFrequency` parameter:
+
 ```http
 POST http://localhost:8989/backupProcess
 Content-Type: application/json
 
 {
-  "batchId": "BATCH_20260206_001",
-  "businessDate": "2026-02-06",
-  "categoryCode": "HWA_EPR_DB_BACKUP_FULL"  // or "HWA_EPR_DB_BACKUP_INCRE"
+  "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+  "batchTransactionDate": "20260315",
+  "batchCategoryParameters": {
+    "backupType": "FULL",
+    "backupFrequency": "MONTHLY"  // or "WEEKLY", "10_DAYS", "15_DAYS", etc.
+  }
 }
 ```
+
+**Supported Frequencies**:
+- `MONTHLY` - Monthly backups
+- `WEEKLY` - Weekly backups
+- `10_DAYS`, `15_DAYS`, `20_DAYS` - Custom intervals
+- Any `{N}_DAYS` format
 
 **Response:**
 ```json
@@ -47,20 +59,21 @@ Content-Type: application/json
 ### 2. FULL_BACKUP_TRACKER
 ```sql
 -- Stores full backup state and base UUID
--- UNIQUE constraint: (category_code, backup_month)
--- One full backup per category per month
+-- UNIQUE constraint: (category_code, backup_period)
+-- One full backup per category per period
 
 Key Fields:
 - base_backup_uuid: Critical for incremental backups
 - backup_status: IN_PROGRESS | SUCCESS | FAILED
 - task_uuid: For YBA job tracking
 - full_backup_response: YBA API response JSON
+- backup_period: Stores period (YYYY-MM, YYYY-Www, or YYYY-MM-DD)
 ```
 
 ### 3. INCREMENTAL_BACKUP_TRACKER
 ```sql
 -- Stores incremental backup state
--- NO UNIQUE constraint: Multiple incrementals per month allowed
+-- NO UNIQUE constraint: Multiple incrementals per period allowed
 -- References base_backup_uuid from full_backup_tracker
 
 Key Fields:
@@ -144,23 +157,23 @@ yba:
 
 ### Check Full Backup Status
 ```sql
-SELECT 
+SELECT
   batch_id,
   category_code,
-  backup_month,
+  backup_period,
   backup_status,
   base_backup_uuid,
   start_time,
   end_time,
   EXTRACT(EPOCH FROM (end_time - start_time))/60 AS duration_minutes
 FROM epricing.full_backup_tracker
-WHERE backup_month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+WHERE backup_period = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
 ORDER BY start_time DESC;
 ```
 
 ### Check Incremental Backups
 ```sql
-SELECT 
+SELECT
   batch_id,
   category_code,
   business_date,
@@ -168,7 +181,7 @@ SELECT
   backup_status,
   start_time
 FROM epricing.incremental_backup_tracker
-WHERE backup_month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+WHERE backup_period = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
 ORDER BY business_date DESC;
 ```
 
@@ -201,15 +214,15 @@ WHERE backup_status = 'FAILED'
 ORDER BY start_time DESC;
 ```
 
-### Get Base UUID for Current Month
+### Get Base UUID for Current Period
 ```sql
-SELECT 
+SELECT
   category_code,
   base_backup_uuid,
   backup_status,
   updated_at
 FROM epricing.full_backup_tracker
-WHERE backup_month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+WHERE backup_period = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
   AND backup_status = 'SUCCESS'
 ORDER BY category_code;
 ```
@@ -248,18 +261,18 @@ WHERE backup_status = 'IN_PROGRESS';
 **Symptom:**
 ```
 IllegalStateException: Base backup UUID not found for category 'HWA_EPR_DB_BACKUP_INCRE'
-and month '2026-02'. Please perform a full backup first for the current month.
+and period '2026-02'. Please perform a full backup first for the current period.
 ```
 
 **Root Cause:**
-- No successful full backup exists for the current month
+- No successful full backup exists for the current period
 - Full backup failed or still in progress
 
 **Solution:**
 ```sql
--- 1. Check if full backup exists for current month
+-- 1. Check if full backup exists for current period
 SELECT * FROM epricing.full_backup_tracker
-WHERE backup_month = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+WHERE backup_period = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
   AND category_code LIKE '%FULL%';
 
 -- 2. If no record or status != SUCCESS, trigger full backup first

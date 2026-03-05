@@ -30,7 +30,7 @@ class BackupDaoServiceTest {
     private BackupDaoService backupDaoService;
 
     private Map<String, Object> testParam;
-    private String testBackupMonth = "2026-02";
+    private String testBackupPeriod = "2026-02";  // Renamed from testBackupMonth
     private String testTaskUuid = "task-uuid-123";
     private String testFullBackupResponse = "{\"status\":\"success\"}";
     private String testDbName = "testdb";
@@ -64,7 +64,7 @@ class BackupDaoServiceTest {
     @Test
     void insertFullBackupRecord_Success() {
         // When
-        backupDaoService.insertFullBackupRecord(testParam, testBackupMonth, testTaskUuid,
+        backupDaoService.insertFullBackupRecord(testParam, testBackupPeriod, testTaskUuid,
                 testFullBackupResponse, testDbName);
 
         // Then
@@ -79,7 +79,7 @@ class BackupDaoServiceTest {
 
         // When & Then
         DbBackupException exception = assertThrows(DbBackupException.class, () ->
-                backupDaoService.insertFullBackupRecord(testParam, testBackupMonth, testTaskUuid,
+                backupDaoService.insertFullBackupRecord(testParam, testBackupPeriod, testTaskUuid,
                         testFullBackupResponse, testDbName));
 
         assertTrue(exception.getMessage().contains(testCategoryCode));
@@ -89,7 +89,7 @@ class BackupDaoServiceTest {
     @Test
     void updateFullBackupWithBaseUuid_Success() {
         // When
-        backupDaoService.updateFullBackupWithBaseUuid(testCategoryCode, testBackupMonth,
+        backupDaoService.updateFullBackupWithBaseUuid(testCategoryCode, testBackupPeriod,
                 testBaseBackupUuid, testBatchId, "SUCCESS");
 
         // Then
@@ -104,7 +104,7 @@ class BackupDaoServiceTest {
 
         // When & Then
         DbBackupException exception = assertThrows(DbBackupException.class, () ->
-                backupDaoService.updateFullBackupWithBaseUuid(testCategoryCode, testBackupMonth,
+                backupDaoService.updateFullBackupWithBaseUuid(testCategoryCode, testBackupPeriod,
                         testBaseBackupUuid, testBatchId, "SUCCESS"));
 
         assertTrue(exception.getMessage().contains(testCategoryCode));
@@ -117,7 +117,7 @@ class BackupDaoServiceTest {
                 .thenReturn(testBaseBackupUuid);
 
         // When
-        String result = backupDaoService.getBaseBackupUuidFromDb(testBackupMonth, testDbName);
+        String result = backupDaoService.getBaseBackupUuidFromDb(testBackupPeriod, testDbName);
 
         // Then
         assertEquals(testBaseBackupUuid, result);
@@ -131,7 +131,7 @@ class BackupDaoServiceTest {
                 .thenThrow(new org.springframework.dao.EmptyResultDataAccessException(1));
 
         // When
-        String result = backupDaoService.getBaseBackupUuidFromDb(testBackupMonth, testDbName);
+        String result = backupDaoService.getBaseBackupUuidFromDb(testBackupPeriod, testDbName);
 
         // Then
         assertEquals("", result);
@@ -145,7 +145,7 @@ class BackupDaoServiceTest {
 
         // When & Then
         assertThrows(DbBackupException.class, () ->
-                backupDaoService.getBaseBackupUuidFromDb(testBackupMonth, testDbName));
+                backupDaoService.getBaseBackupUuidFromDb(testBackupPeriod, testDbName));
     }
 
     // ==================== INCREMENTAL BACKUP TEST CASES ====================
@@ -154,7 +154,7 @@ class BackupDaoServiceTest {
     void insertIncrementalBackupRecord_Success() {
         // When
         backupDaoService.insertIncrementalBackupRecord(testBatchId, testCategoryCode, testBusinessDate,
-                testBackupMonth);
+                testBackupPeriod);
 
         // Then
         verify(jdbcTemplate).update(eq("INSERT INTO incremental_backup_tracker (...) VALUES (...)"), any(Map.class));
@@ -169,15 +169,15 @@ class BackupDaoServiceTest {
         // When & Then
         DbBackupException exception = assertThrows(DbBackupException.class, () ->
                 backupDaoService.insertIncrementalBackupRecord(testBatchId, testCategoryCode, testBusinessDate,
-                        testBackupMonth));
+                        testBackupPeriod));
 
         assertTrue(exception.getMessage().contains(testCategoryCode));
     }
 
     @Test
-    void updateIncrementalBackupStatusByMonth_Success() {
+    void updateIncrementalBackupStatusByPeriod_Success() {
         // When
-        backupDaoService.updateIncrementalBackupStatusByMonth(testCategoryCode, testBackupMonth,
+        backupDaoService.updateIncrementalBackupStatusByMonth(testCategoryCode, testBackupPeriod,
                 testBaseBackupUuid, "SUCCESS", testBatchId,"","");
 
         // Then
@@ -185,23 +185,47 @@ class BackupDaoServiceTest {
     }
 
     @Test
-    void updateIncrementalBackupStatusByMonth_DatabaseFailure_ThrowsDbBackupException() {
+    void updateIncrementalBackupStatusByPeriod_DatabaseFailure_ThrowsDbBackupException() {
         // Given
         doThrow(new RuntimeException("DB Error")).when(jdbcTemplate)
                 .update(anyString(), any(Map.class));
 
         // When & Then
         DbBackupException exception = assertThrows(DbBackupException.class, () ->
-                backupDaoService.updateIncrementalBackupStatusByMonth(testCategoryCode, testBackupMonth,
+                backupDaoService.updateIncrementalBackupStatusByMonth(testCategoryCode, testBackupPeriod,
                         testBaseBackupUuid, "SUCCESS", testBatchId,"",""));
 
         assertTrue(exception.getMessage().contains(testCategoryCode));
     }
 
     @Test
-    void updateIncrementalBackupStatusByMonth_NullParameters_DoesNotThrow() {
+    void updateIncrementalBackupStatusByPeriod_NullParameters_DoesNotThrow() {
         // When & Then - should not throw NPE as parameters are properly handled
         assertDoesNotThrow(() ->
                 backupDaoService.updateIncrementalBackupStatusByMonth(null, null, null, null, null,null,null));
+    }
+
+    @Test
+    void testWeeklyBackupPeriod() {
+        // Test with weekly period format
+        String weeklyPeriod = "2026-W10";
+        when(jdbcTemplate.queryForObject(anyString(), any(Map.class), eq(String.class)))
+                .thenReturn(testBaseBackupUuid);
+
+        String result = backupDaoService.getBaseBackupUuidFromDb(weeklyPeriod, testDbName);
+
+        assertEquals(testBaseBackupUuid, result);
+    }
+
+    @Test
+    void testCustomIntervalBackupPeriod() {
+        // Test with custom interval period format
+        String customPeriod = "2026-03-11";
+        when(jdbcTemplate.queryForObject(anyString(), any(Map.class), eq(String.class)))
+                .thenReturn(testBaseBackupUuid);
+
+        String result = backupDaoService.getBaseBackupUuidFromDb(customPeriod, testDbName);
+
+        assertEquals(testBaseBackupUuid, result);
     }
 }
