@@ -10,11 +10,14 @@
 ### New Logic (After - YAML-Driven with Single Parameter)
 - **Request-Based**: Single `backupFrequency` parameter in every backup request
 - **YAML Configuration**: Only 3 configs needed - dynamic interval support!
-- **Period Formats**:
+- **Period Formats** (Simple Identifiers for Matching):
   - MONTHLY: `YYYY-MM` (e.g., "2026-03")
   - WEEKLY: `YYYY-Www` (e.g., "2026-W11")
-  - N_DAYS: `YYYY-MM-DD` (e.g., "10_DAYS" → "2026-03-11")
-- **Benefit**: Single parameter, fully dynamic, no code changes needed!
+  - N_DAYS: `YYYY-MM-DD` (e.g., "10_DAYS" → "2026-01-01")
+- **Database Tracking** (Two Columns):
+  - `backup_period`: Simple identifier for matching base backups (e.g., "2026-03", "2026-W11") ⭐ UPDATED
+  - `backup_interval`: Date range for audit trail (e.g., "2026-01-01 to 2026-01-31") ⭐ NEW
+- **Benefit**: Single parameter, fully dynamic, complete audit trail with exact date ranges!
 
 ---
 
@@ -47,21 +50,21 @@ backup:
 
 **Timeline: March 2026**
 
-| Date | Request Type | What Happens | backup_period Value | base_backup_uuid |
-|------|-------------|--------------|---------------------|------------------|
-| Mar 1 | Full Backup | Creates new full backup | `2026-03` | `uuid-123` |
-| Mar 5 | Incremental | Uses base from `2026-03` | `2026-03` | `uuid-123` |
-| Mar 10 | Incremental | Uses base from `2026-03` | `2026-03` | `uuid-123` |
-| Mar 20 | Incremental | Uses base from `2026-03` | `2026-03` | `uuid-123` |
-| Mar 31 | Incremental | Uses base from `2026-03` | `2026-03` | `uuid-123` |
+| Date | Request Type | What Happens | backup_period | backup_interval | base_backup_uuid |
+|------|-------------|--------------|---------------|-----------------|------------------|
+| Mar 1 | Full Backup | Creates new full backup | `2026-03` | `2026-03-01 to 2026-03-31` | `uuid-123` |
+| Mar 5 | Incremental | Uses base from March | `2026-03` | `2026-03-01 to 2026-03-31` | `uuid-123` |
+| Mar 10 | Incremental | Uses base from March | `2026-03` | `2026-03-01 to 2026-03-31` | `uuid-123` |
+| Mar 20 | Incremental | Uses base from March | `2026-03` | `2026-03-01 to 2026-03-31` | `uuid-123` |
+| Mar 31 | Incremental | Uses base from March | `2026-03` | `2026-03-01 to 2026-03-31` | `uuid-123` |
 
 **Timeline: April 2026**
 
-| Date | Request Type | What Happens | backup_period Value | base_backup_uuid |
-|------|-------------|--------------|---------------------|------------------|
-| Apr 1 | Full Backup | Creates NEW full backup | `2026-04` | `uuid-456` |
-| Apr 5 | Incremental | Uses base from `2026-04` | `2026-04` | `uuid-456` |
-| Apr 15 | Incremental | Uses base from `2026-04` | `2026-04` | `uuid-456` |
+| Date | Request Type | What Happens | backup_period | backup_interval | base_backup_uuid |
+|------|-------------|--------------|---------------|-----------------|------------------|
+| Apr 1 | Full Backup | Creates NEW full backup | `2026-04` | `2026-04-01 to 2026-04-30` | `uuid-456` |
+| Apr 5 | Incremental | Uses base from April | `2026-04` | `2026-04-01 to 2026-04-30` | `uuid-456` |
+| Apr 15 | Incremental | Uses base from April | `2026-04` | `2026-04-01 to 2026-04-30` | `uuid-456` |
 
 **Key Points:**
 - ✅ All backups in March use period `2026-03`
@@ -100,20 +103,20 @@ backup:
 
 **Timeline: March 2026**
 
-| Date | Week | Request Type | What Happens | backup_period Value | base_backup_uuid |
-|------|------|-------------|--------------|---------------------|------------------|
-| Mar 2 (Mon) | W10 | Full Backup | Creates new full backup | `2026-W10` | `uuid-w10` |
-| Mar 3 (Tue) | W10 | Incremental | Uses base from `2026-W10` | `2026-W10` | `uuid-w10` |
-| Mar 5 (Thu) | W10 | Incremental | Uses base from `2026-W10` | `2026-W10` | `uuid-w10` |
-| Mar 7 (Sat) | W10 | Incremental | Uses base from `2026-W10` | `2026-W10` | `uuid-w10` |
-| | | | | | |
-| Mar 9 (Mon) | W11 | Full Backup | Creates NEW full backup | `2026-W11` | `uuid-w11` |
-| Mar 10 (Tue) | W11 | Incremental | Uses base from `2026-W11` | `2026-W11` | `uuid-w11` |
-| Mar 12 (Thu) | W11 | Incremental | Uses base from `2026-W11` | `2026-W11` | `uuid-w11` |
-| Mar 14 (Sat) | W11 | Incremental | Uses base from `2026-W11` | `2026-W11` | `uuid-w11` |
-| | | | | | |
-| Mar 16 (Mon) | W12 | Full Backup | Creates NEW full backup | `2026-W12` | `uuid-w12` |
-| Mar 18 (Wed) | W12 | Incremental | Uses base from `2026-W12` | `2026-W12` | `uuid-w12` |
+| Date | Week | Request Type | What Happens | backup_period | backup_interval | base_backup_uuid |
+|------|------|-------------|--------------|---------------|-----------------|------------------|
+| Mar 2 (Mon) | W10 | Full Backup | Creates new full backup | `2026-W10` | `2026-03-02 to 2026-03-08` | `uuid-w10` |
+| Mar 3 (Tue) | W10 | Incremental | Uses base from W10 | `2026-W10` | `2026-03-02 to 2026-03-08` | `uuid-w10` |
+| Mar 5 (Thu) | W10 | Incremental | Uses base from W10 | `2026-W10` | `2026-03-02 to 2026-03-08` | `uuid-w10` |
+| Mar 7 (Sat) | W10 | Incremental | Uses base from W10 | `2026-W10` | `2026-03-02 to 2026-03-08` | `uuid-w10` |
+| | | | | | | |
+| Mar 9 (Mon) | W11 | Full Backup | Creates NEW full backup | `2026-W11` | `2026-03-09 to 2026-03-15` | `uuid-w11` |
+| Mar 10 (Tue) | W11 | Incremental | Uses base from W11 | `2026-W11` | `2026-03-09 to 2026-03-15` | `uuid-w11` |
+| Mar 12 (Thu) | W11 | Incremental | Uses base from W11 | `2026-W11` | `2026-03-09 to 2026-03-15` | `uuid-w11` |
+| Mar 14 (Sat) | W11 | Incremental | Uses base from W11 | `2026-W11` | `2026-03-09 to 2026-03-15` | `uuid-w11` |
+| | | | | | | |
+| Mar 16 (Mon) | W12 | Full Backup | Creates NEW full backup | `2026-W12` | `2026-03-16 to 2026-03-22` | `uuid-w12` |
+| Mar 18 (Wed) | W12 | Incremental | Uses base from W12 | `2026-W12` | `2026-03-16 to 2026-03-22` | `uuid-w12` |
 
 **Key Points:**
 - ✅ Each week has ONE full backup
@@ -169,24 +172,24 @@ backup:
 
 **Timeline: January 2026 (Starting from epoch 2026-01-01)**
 
-| Date | Interval | Request Type | What Happens | backup_period Value | base_backup_uuid |
-|------|----------|-------------|--------------|---------------------|------------------|
-| Jan 1 | Days 1-10 | Full Backup | Creates new full backup | `2026-01-01` | `uuid-d1` |
-| Jan 3 | Days 1-10 | Incremental | Uses base from `2026-01-01` | `2026-01-01` | `uuid-d1` |
-| Jan 7 | Days 1-10 | Incremental | Uses base from `2026-01-01` | `2026-01-01` | `uuid-d1` |
-| Jan 10 | Days 1-10 | Incremental | Uses base from `2026-01-01` | `2026-01-01` | `uuid-d1` |
-| | | | | | |
-| Jan 11 | Days 11-20 | Full Backup | Creates NEW full backup | `2026-01-11` | `uuid-d11` |
-| Jan 13 | Days 11-20 | Incremental | Uses base from `2026-01-11` | `2026-01-11` | `uuid-d11` |
-| Jan 17 | Days 11-20 | Incremental | Uses base from `2026-01-11` | `2026-01-11` | `uuid-d11` |
-| Jan 20 | Days 11-20 | Incremental | Uses base from `2026-01-11` | `2026-01-11` | `uuid-d11` |
-| | | | | | |
-| Jan 21 | Days 21-30 | Full Backup | Creates NEW full backup | `2026-01-21` | `uuid-d21` |
-| Jan 25 | Days 21-30 | Incremental | Uses base from `2026-01-21` | `2026-01-21` | `uuid-d21` |
-| Jan 28 | Days 21-30 | Incremental | Uses base from `2026-01-21` | `2026-01-21` | `uuid-d21` |
-| | | | | | |
-| Jan 31 | Days 31-40 | Full Backup | Creates NEW full backup | `2026-01-31` | `uuid-d31` |
-| Feb 3 | Days 31-40 | Incremental | Uses base from `2026-01-31` | `2026-01-31` | `uuid-d31` |
+| Date | Interval | Request Type | What Happens | backup_period | backup_interval | base_backup_uuid |
+|------|----------|-------------|--------------|---------------|-----------------|------------------|
+| Jan 1 | Days 1-10 | Full Backup | Creates new full backup | `2026-01-01` | `2026-01-01 to 2026-01-10` | `uuid-d1` |
+| Jan 3 | Days 1-10 | Incremental | Uses base from Days 1-10 | `2026-01-01` | `2026-01-01 to 2026-01-10` | `uuid-d1` |
+| Jan 7 | Days 1-10 | Incremental | Uses base from Days 1-10 | `2026-01-01` | `2026-01-01 to 2026-01-10` | `uuid-d1` |
+| Jan 10 | Days 1-10 | Incremental | Uses base from Days 1-10 | `2026-01-01` | `2026-01-01 to 2026-01-10` | `uuid-d1` |
+| | | | | | | |
+| Jan 11 | Days 11-20 | Full Backup | Creates NEW full backup | `2026-01-11` | `2026-01-11 to 2026-01-20` | `uuid-d11` |
+| Jan 13 | Days 11-20 | Incremental | Uses base from Days 11-20 | `2026-01-11` | `2026-01-11 to 2026-01-20` | `uuid-d11` |
+| Jan 17 | Days 11-20 | Incremental | Uses base from Days 11-20 | `2026-01-11` | `2026-01-11 to 2026-01-20` | `uuid-d11` |
+| Jan 20 | Days 11-20 | Incremental | Uses base from Days 11-20 | `2026-01-11` | `2026-01-11 to 2026-01-20` | `uuid-d11` |
+| | | | | | | |
+| Jan 21 | Days 21-30 | Full Backup | Creates NEW full backup | `2026-01-21` | `2026-01-21 to 2026-01-30` | `uuid-d21` |
+| Jan 25 | Days 21-30 | Incremental | Uses base from Days 21-30 | `2026-01-21` | `2026-01-21 to 2026-01-30` | `uuid-d21` |
+| Jan 28 | Days 21-30 | Incremental | Uses base from Days 21-30 | `2026-01-21` | `2026-01-21 to 2026-01-30` | `uuid-d21` |
+| | | | | | | |
+| Jan 31 | Days 31-40 | Full Backup | Creates NEW full backup | `2026-01-31` | `2026-01-31 to 2026-02-09` | `uuid-d31` |
+| Feb 3 | Days 31-40 | Incremental | Uses base from Days 31-40 | `2026-01-31` | `2026-01-31 to 2026-02-09` | `uuid-d31` |
 
 **Key Points:**
 - ✅ Every 10 days, a new full backup is created
@@ -839,5 +842,144 @@ curl -X POST http://localhost:8080/api/backup \
 
 ---
 
-**Need more examples? Check the logs when running backups - they show exactly what period is being calculated!**
+## 📊 Database Tracking with backup_interval Column
+
+### What Gets Stored in the Database
+
+Every backup operation now stores **TWO** important values:
+
+1. **`backup_period`**: Simple identifier for matching base backups (e.g., "2026-03", "2026-W11", "2026-01-01") ⭐ **UPDATED**
+2. **`backup_interval`**: Date range for audit trail (e.g., "2026-01-01 to 2026-01-31") ⭐ **NEW**
+
+### Example Database Records
+
+#### full_backup_tracker table
+```sql
+SELECT batch_id, backup_period, backup_interval, backup_status, db_name
+FROM epricing.full_backup_tracker
+ORDER BY start_time DESC;
+```
+
+**Results:**
+| batch_id | backup_period | backup_interval | backup_status | db_name |
+|----------|---------------|-----------------|---------------|---------|
+| BATCH_001 | **2026-03** | **2026-03-01 to 2026-03-31** | SUCCESS | HWA_EPR_DB |
+| BATCH_002 | **2026-W11** | **2026-03-09 to 2026-03-15** | SUCCESS | UAM_DB |
+| BATCH_003 | **2026-01-01** | **2026-01-01 to 2026-01-10** | SUCCESS | COMPLIANCE_DB |
+| BATCH_004 | **2026-01-11** | **2026-01-11 to 2026-01-20** | SUCCESS | COMPLIANCE_DB |
+| BATCH_005 | **2026-04** | **2026-04-01 to 2026-04-30** | SUCCESS | HWA_EPR_DB |
+
+#### incremental_backup_tracker table
+```sql
+SELECT batch_id, backup_period, backup_interval, backup_status
+FROM epricing.incremental_backup_tracker
+ORDER BY start_time DESC;
+```
+
+**Results:**
+| batch_id | backup_period | backup_interval | backup_status |
+|----------|---------------|-----------------|---------------|
+| BATCH_INC_001 | **2026-03** | **2026-03-01 to 2026-03-31** | SUCCESS |
+| BATCH_INC_002 | **2026-W11** | **2026-03-09 to 2026-03-15** | SUCCESS |
+| BATCH_INC_003 | **2026-01-01** | **2026-01-01 to 2026-01-10** | SUCCESS |
+
+### Useful Queries
+
+#### 1. Find all MONTHLY backups
+```sql
+SELECT * FROM epricing.full_backup_tracker
+WHERE backup_interval = 'MONTHLY'
+ORDER BY start_time DESC;
+```
+
+#### 2. Find all WEEKLY backups
+```sql
+SELECT * FROM epricing.full_backup_tracker
+WHERE backup_interval = 'WEEKLY'
+ORDER BY start_time DESC;
+```
+
+#### 3. Find all custom interval backups (10_DAYS, 15_DAYS, etc.)
+```sql
+SELECT * FROM epricing.full_backup_tracker
+WHERE backup_interval LIKE '%_DAYS'
+ORDER BY start_time DESC;
+```
+
+#### 4. Find all backups for a specific date range
+```sql
+SELECT * FROM epricing.full_backup_tracker
+WHERE backup_period = '2026-03-01 to 2026-03-31';
+```
+
+#### 5. Find all backups that include a specific date
+```sql
+SELECT * FROM epricing.full_backup_tracker
+WHERE '2026-03-15' BETWEEN
+    CAST(SPLIT_PART(backup_period, ' to ', 1) AS DATE) AND
+    CAST(SPLIT_PART(backup_period, ' to ', 2) AS DATE);
+```
+
+#### 6. Count backups by interval type with date ranges
+```sql
+SELECT
+    backup_interval,
+    COUNT(*) as backup_count,
+    MIN(backup_period) as earliest_period,
+    MAX(backup_period) as latest_period
+FROM epricing.full_backup_tracker
+WHERE backup_status = 'SUCCESS'
+GROUP BY backup_interval
+ORDER BY backup_count DESC;
+```
+
+**Example Results:**
+| backup_interval | backup_count | earliest_period | latest_period |
+|-----------------|--------------|-----------------|---------------|
+| MONTHLY | 45 | 2026-01-01 to 2026-01-31 | 2026-12-01 to 2026-12-31 |
+| WEEKLY | 23 | 2026-01-06 to 2026-01-12 | 2026-06-08 to 2026-06-14 |
+| 10_DAYS | 12 | 2026-01-01 to 2026-01-10 | 2026-04-11 to 2026-04-20 |
+| 15_DAYS | 8 | 2026-01-01 to 2026-01-15 | 2026-03-16 to 2026-03-30 |
+
+#### 5. Verify backup frequency for a specific database
+```sql
+SELECT db_name, backup_interval, COUNT(*) as count
+FROM epricing.full_backup_tracker
+WHERE backup_status = 'SUCCESS'
+GROUP BY db_name, backup_interval
+ORDER BY db_name, count DESC;
+```
+
+**Example Results:**
+| db_name | backup_interval | count |
+|---------|-----------------|-------|
+| HWA_EPR_DB | MONTHLY | 12 |
+| UAM_DB | WEEKLY | 52 |
+| COMPLIANCE_DB | 10_DAYS | 36 |
+
+### Benefits of backup_interval Column
+
+✅ **Audit Trail**: Track which frequency was actually used for each backup
+✅ **Verification**: Ensure backups are happening at the correct intervals
+✅ **Reporting**: Generate reports on backup frequency usage
+✅ **Debugging**: Quickly identify if wrong frequency was used
+✅ **Compliance**: Prove that backups meet compliance requirements
+
+### Log Output Example
+
+When a backup runs, you'll see logs like this:
+
+```
+INFO: Inserting full backup record with response for dbName: HWA_EPR_DB, month: 2026-03, interval: MONTHLY
+INFO: Full backup record with response inserted successfully for category: HWA_EPR_DB_BACKUP_FULL with interval: MONTHLY
+```
+
+```
+INFO: Inserting incremental backup record with response for category: UAM_DB_BACKUP_FULL, period: 2026-W11, interval: WEEKLY
+INFO: Incremental backup record with response inserted successfully for category: UAM_DB_BACKUP_FULL with interval: WEEKLY
+```
+
+---
+
+**Need more examples? Check the logs when running backups - they show exactly what period and interval are being used!**
 

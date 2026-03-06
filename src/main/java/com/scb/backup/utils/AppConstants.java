@@ -10,6 +10,7 @@ public class AppConstants {
     public static final String BATCH_FAILED_STATUS = "FAILED";
     public static final String CATEGORY = "categoryCode";
     public static final String BACKUP_PERIOD = "backupPeriod";
+    public static final String BACKUP_INTERVAL = "backupInterval";
     public static final String BACKUP_STATUS = "backupStatus";
     public static final String BACKUP_RESPONSE = "backupResponse";
     public static final String BACKUP_BATCH_ID = "batchId";

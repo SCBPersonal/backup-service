@@ -64,7 +64,7 @@ class BackupDaoServiceTest {
     @Test
     void insertFullBackupRecord_Success() {
         // When
-        backupDaoService.insertFullBackupRecord(testParam, testBackupPeriod, testTaskUuid,
+        backupDaoService.insertFullBackupRecord(testParam, testBackupPeriod, "MONTHLY", testTaskUuid,
                 testFullBackupResponse, testDbName);
 
         // Then
@@ -79,7 +79,7 @@ class BackupDaoServiceTest {
 
         // When & Then
         DbBackupException exception = assertThrows(DbBackupException.class, () ->
-                backupDaoService.insertFullBackupRecord(testParam, testBackupPeriod, testTaskUuid,
+                backupDaoService.insertFullBackupRecord(testParam, testBackupPeriod, "MONTHLY", testTaskUuid,
                         testFullBackupResponse, testDbName));
 
         assertTrue(exception.getMessage().contains(testCategoryCode));
@@ -154,7 +154,7 @@ class BackupDaoServiceTest {
     void insertIncrementalBackupRecord_Success() {
         // When
         backupDaoService.insertIncrementalBackupRecord(testBatchId, testCategoryCode, testBusinessDate,
-                testBackupPeriod);
+                testBackupPeriod, "MONTHLY");
 
         // Then
         verify(jdbcTemplate).update(eq("INSERT INTO incremental_backup_tracker (...) VALUES (...)"), any(Map.class));
@@ -169,7 +169,7 @@ class BackupDaoServiceTest {
         // When & Then
         DbBackupException exception = assertThrows(DbBackupException.class, () ->
                 backupDaoService.insertIncrementalBackupRecord(testBatchId, testCategoryCode, testBusinessDate,
-                        testBackupPeriod));
+                        testBackupPeriod, "MONTHLY"));
 
         assertTrue(exception.getMessage().contains(testCategoryCode));
     }

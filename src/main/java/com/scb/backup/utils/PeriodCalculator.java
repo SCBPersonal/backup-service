@@ -3,8 +3,11 @@ package com.scb.backup.utils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.WeekFields;
+import java.util.Locale;
 
 /**
  * PeriodCalculator - Simple utility for calculating backup periods using date formats.
@@ -83,6 +86,53 @@ public class PeriodCalculator {
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern(formatPattern);
         return intervalStartDate.format(formatter);
+    }
+
+    /**
+     * Calculates the backup period range (start date to end date) based on backup frequency.
+     *
+     * Examples:
+     * - MONTHLY: "2026-01-01 to 2026-01-31"
+     * - WEEKLY: "2026-01-01 to 2026-01-07"
+     * - 10_DAYS: "2026-01-01 to 2026-01-10"
+     *
+     * @param backupFrequency Backup frequency (MONTHLY, WEEKLY, or N_DAYS like 10_DAYS)
+     * @param epochDate Epoch date string (only for N_DAYS format)
+     * @return Period range string in format "YYYY-MM-DD to YYYY-MM-DD"
+     */
+    public static String calculatePeriodRange(String backupFrequency, String epochDate) {
+        LocalDate currentDate = LocalDate.now();
+        LocalDate startDate;
+        LocalDate endDate;
+
+        if (backupFrequency.equals("MONTHLY")) {
+            // Monthly: First day to last day of current month
+            YearMonth yearMonth = YearMonth.from(currentDate);
+            startDate = yearMonth.atDay(1);
+            endDate = yearMonth.atEndOfMonth();
+
+        } else if (backupFrequency.equals("WEEKLY")) {
+            // Weekly: Monday to Sunday of current week
+            WeekFields weekFields = WeekFields.of(Locale.getDefault());
+            startDate = currentDate.with(weekFields.dayOfWeek(), 1); // Monday
+            endDate = startDate.plusDays(6); // Sunday
+
+        } else if (backupFrequency.endsWith("_DAYS")) {
+            // Custom interval: Calculate based on epoch
+            int intervalDays = extractIntervalDays(backupFrequency);
+            LocalDate epoch = LocalDate.parse(epochDate);
+            long daysSinceEpoch = ChronoUnit.DAYS.between(epoch, currentDate);
+            long intervalNumber = daysSinceEpoch / intervalDays;
+            long intervalStartDay = intervalNumber * intervalDays;
+            startDate = epoch.plusDays(intervalStartDay);
+            endDate = startDate.plusDays(intervalDays - 1);
+
+        } else {
+            throw new IllegalArgumentException("Unsupported backup frequency: " + backupFrequency);
+        }
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        return startDate.format(formatter) + " to " + endDate.format(formatter);
     }
 }
 

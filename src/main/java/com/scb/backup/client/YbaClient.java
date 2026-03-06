@@ -18,9 +18,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Map;
 
@@ -101,11 +98,12 @@ public class YbaClient {
      * @throws IllegalStateException if base backup UUID not found for current period
      */
     private Mono<JsonNode> performIncrementalBackup(YbaDynamicConfig config, String categoryCode, Map<String, Object> batchParams) {
-        String backupPeriod = getBackupPeriod(categoryCode, batchParams);
+        String backupPeriod = getBackupPeriod(categoryCode, batchParams);  // Simple identifier for matching
+        String backupInterval = getBackupInterval(categoryCode, batchParams);  // Date range for audit
         String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
         Date businessDate = (Date) batchParams.get(AppConstants.BUSINESS_DATE);
         backupDaoService.insertIncrementalBackupRecord(
-                batchId, categoryCode, businessDate, backupPeriod);
+                batchId, categoryCode, businessDate, backupPeriod, backupInterval);
 
         return Mono.fromCallable(() -> backupDaoService.getBaseBackupUuidFromDb(backupPeriod,config.getDbName()))
                 .flatMap(baseUuid ->  {
@@ -143,19 +141,19 @@ public class YbaClient {
     }
 
     /**
-     * Gets the current backup period based on the backup frequency from the request payload.
+     * Gets the current backup period identifier for matching base backups.
      *
-     * This method calculates the backup period using configuration from application.yml.
-     * The period format is determined by the backupFrequency parameter.
+     * This method calculates a simple period identifier used for matching incremental backups
+     * to their base full backup. Returns formats like "2026-03", "2026-W11", "2026-01-01".
      *
-     * Supported values:
-     * - MONTHLY: Returns YYYY-MM format (e.g., "2026-03")
-     * - WEEKLY: Returns YYYY-Www format (e.g., "2026-W11")
-     * - N_DAYS: Returns YYYY-MM-DD format (e.g., "10_DAYS" → "2026-03-11")
+     * Supported values and their formats:
+     * - MONTHLY: Returns "YYYY-MM" (e.g., "2026-03")
+     * - WEEKLY: Returns "YYYY-Www" (e.g., "2026-W11")
+     * - N_DAYS: Returns "YYYY-MM-DD" (e.g., "10_DAYS" → "2026-01-01")
      *
      * @param categoryCode The backup category code
      * @param batchParams Batch parameters containing backupFrequency
-     * @return String representing the current backup period
+     * @return String representing the backup period identifier
      * @throws IllegalArgumentException if backupFrequency is not provided or invalid
      */
     private String getBackupPeriod(String categoryCode, Map<String, Object> batchParams) {
@@ -172,7 +170,7 @@ public class YbaClient {
             throw new IllegalArgumentException(errorMsg);
         }
 
-        // Determine which YAML config to use
+        // Determine which YAML config to use (for epoch date)
         String configKey;
         if (backupFrequency.endsWith("_DAYS")) {
             configKey = "CUSTOM";  // All N_DAYS formats use CUSTOM config
@@ -191,16 +189,70 @@ public class YbaClient {
             throw new IllegalArgumentException(errorMsg);
         }
 
-        // Calculate period using YAML configuration
-        String period = PeriodCalculator.calculatePeriod(
+        // Calculate period identifier (simple format for matching)
+        String periodIdentifier = PeriodCalculator.calculatePeriod(
             backupFrequency,
             config.getFormat(),
             config.getEpochDate()
         );
 
-        log.info("Calculated backup period: {} for category: {} with backup frequency: {} (format: {})",
-                period, categoryCode, backupFrequency, config.getFormat());
-        return period;
+        log.info("Calculated backup period identifier: {} for category: {} with backup frequency: {}",
+                periodIdentifier, categoryCode, backupFrequency);
+        return periodIdentifier;
+    }
+
+    /**
+     * Gets the current backup interval (date range) for audit trail.
+     *
+     * This method calculates the actual date range covered by the backup period.
+     * Returns date range strings like "2026-01-01 to 2026-01-31" for audit and reporting.
+     *
+     * Supported values and their ranges:
+     * - MONTHLY: Returns "YYYY-MM-DD to YYYY-MM-DD" (e.g., "2026-01-01 to 2026-01-31")
+     * - WEEKLY: Returns "YYYY-MM-DD to YYYY-MM-DD" (e.g., "2026-01-06 to 2026-01-12")
+     * - N_DAYS: Returns "YYYY-MM-DD to YYYY-MM-DD" (e.g., "10_DAYS" → "2026-01-01 to 2026-01-10")
+     *
+     * @param categoryCode The backup category code
+     * @param batchParams Batch parameters containing backupFrequency
+     * @return String representing the backup date range
+     * @throws IllegalArgumentException if backupFrequency is not provided or invalid
+     */
+    private String getBackupInterval(String categoryCode, Map<String, Object> batchParams) {
+        // Get backup frequency from request payload (REQUIRED)
+        String backupFrequency = (String) batchParams.get(AppConstants.BACKUP_FREQUENCY);
+
+        if (backupFrequency == null || backupFrequency.trim().isEmpty()) {
+            String errorMsg = String.format(
+                "backupFrequency is required in the request payload for category: %s",
+                categoryCode
+            );
+            log.error(errorMsg);
+            throw new IllegalArgumentException(errorMsg);
+        }
+
+        // Determine which YAML config to use (for epoch date)
+        String configKey;
+        if (backupFrequency.endsWith("_DAYS")) {
+            configKey = "CUSTOM";
+        } else {
+            configKey = backupFrequency;
+        }
+
+        // Get period configuration from YAML
+        PeriodCalculationProperties.PeriodConfig config = periodConfig.getConfig(configKey);
+        if (config == null) {
+            throw new IllegalArgumentException("Invalid backupFrequency: " + backupFrequency);
+        }
+
+        // Calculate period range (date range for audit trail)
+        String periodRange = PeriodCalculator.calculatePeriodRange(
+            backupFrequency,
+            config.getEpochDate()
+        );
+
+        log.info("Calculated backup interval (date range): {} for category: {} with backup frequency: {}",
+                periodRange, categoryCode, backupFrequency);
+        return periodRange;
     }
 
     /**
@@ -223,7 +275,8 @@ public class YbaClient {
      */
     private Mono<JsonNode> fullBackup(YbaDynamicConfig config, String categoryCode, Map<String, Object> batchParams)  {
 
-        String backupPeriod = getBackupPeriod(categoryCode, batchParams);
+        String backupPeriod = getBackupPeriod(categoryCode, batchParams);  // Simple identifier for matching
+        String backupInterval = getBackupInterval(categoryCode, batchParams);  // Date range for audit
         String batchId = (String) batchParams.get(AppConstants.BATCH_ID);
 
 
@@ -254,11 +307,11 @@ public class YbaClient {
                     // Extract task UUID from response
                     String taskUuid = extractTaskUuidFromResponse(response);
 
-                    // Insert into full_backup_tracker with task UUID and response in one operation
+                    // Insert into full_backup_tracker with task UUID, interval (date range), and response in one operation
                     backupDaoService.insertFullBackupRecord(
-                            batchParams ,backupPeriod, taskUuid, response.toString(),config.getDbName());
-                    log.info("Inserted full backup record with response for batch: {}, category: {}, task: {}, period: {}",
-                            batchId, categoryCode, taskUuid, backupPeriod);
+                            batchParams, backupPeriod, backupInterval, taskUuid, response.toString(), config.getDbName());
+                    log.info("Inserted full backup record with response for batch: {}, category: {}, task: {}, period: {}, interval: {}",
+                            batchId, categoryCode, taskUuid, backupPeriod, backupInterval);
 
                     // Start reactive polling for job completion - stays in same Mono chain
                     log.info("Starting reactive polling for full backup task: {}", taskUuid);

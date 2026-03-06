@@ -134,7 +134,7 @@ backup:
 data:
   # Full Backup Table Queries
   insert-full-backup:
-    query: INSERT INTO epricing.full_backup_tracker(batch_id, category_code, business_date, backup_period, backup_status, task_uuid, full_backup_response, start_time,db_name) VALUES(:batch_id, :batchCategoryCode, :businessDate, :backupPeriod, :backupStatus, :taskUUID, :fullBackupResponse, now(),:dbName);
+    query: INSERT INTO epricing.full_backup_tracker(batch_id, category_code, business_date, backup_period, backup_interval, backup_status, task_uuid, full_backup_response, start_time,db_name) VALUES(:batch_id, :batchCategoryCode, :businessDate, :backupPeriod, :backupInterval, :backupStatus, :taskUUID, :fullBackupResponse, now(),:dbName);
 
   update-full-backup-with-base-uuid:
     query: UPDATE epricing.full_backup_tracker SET base_backup_uuid = :baseBackupUUID, backup_status= :backupStatus, end_time = now() WHERE category_code = :categoryCode AND backup_period = :backupPeriod AND batch_id = :batchId;
@@ -144,7 +144,7 @@ data:
 
   # Incremental Backup Table Queries
   insert-incremental-backup:
-    query: INSERT INTO epricing.incremental_backup_tracker(batch_id, category_code, business_date, backup_period,backup_status, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupPeriod,:backupStatus, now());
+    query: INSERT INTO epricing.incremental_backup_tracker(batch_id, category_code, business_date, backup_period, backup_interval, backup_status, start_time) VALUES(:batchId, :categoryCode, :businessDate, :backupPeriod, :backupInterval, :backupStatus, now());
 
   update-incremental-backup-status:
     query: UPDATE epricing.incremental_backup_tracker SET backup_status = :backupStatus,base_backup_uuid = :baseBackupUUID,task_uuid = :taskUUID,incremental_backup_response = :backupResponse,end_time = now() WHERE batch_id = :batchId AND category_code = :categoryCode;

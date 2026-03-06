@@ -61,25 +61,27 @@ public class BackupDaoService {
      *                    MONTHLY: YYYY-MM (e.g., "2026-03")
      *                    WEEKLY: YYYY-Www (e.g., "2026-W10")
      *                    CUSTOM: YYYY-MM-DD (e.g., "2026-03-05")
+     * @param backupInterval Backup frequency interval (e.g., "MONTHLY", "WEEKLY", "10_DAYS")
      * @param taskUuid YBA task UUID for polling
      * @param fullBackupResponse YBA API response JSON
      * @param dbName Database name
      * @throws DbBackupException if database operation fails
      */
     public void insertFullBackupRecord(Map<String,Object> param,
-                                       String backupMonth, String taskUuid, String fullBackupResponse,String dbName) {
-        log.info("Inserting full backup record with response for dbName: {}, month: {}", dbName, backupMonth);
+                                       String backupMonth, String backupInterval, String taskUuid, String fullBackupResponse,String dbName) {
+        log.info("Inserting full backup record with response for dbName: {}, month: {}, interval: {}", dbName, backupMonth, backupInterval);
         String categoryCode = (String) param.get(AppConstants.CATEGORY_CODE);
         try {
 
             param.put(AppConstants.BACKUP_PERIOD, backupMonth);
+            param.put(AppConstants.BACKUP_INTERVAL, backupInterval);
             param.put(AppConstants.BACKUP_STATUS, AppConstants.BACKUP_INPROGRESS_STATUS);
             param.put(AppConstants.TASKUUID, taskUuid);
             param.put(AppConstants.FULL_BACKUP_RESPONSE, fullBackupResponse);
             param.put(AppConstants.DATABASE_NAME,dbName);
 
             jdbcTemplate.update(insertFullBackup, param);
-            log.info("Full backup record with response inserted successfully for category: {}", categoryCode);
+            log.info("Full backup record with response inserted successfully for category: {} with interval: {}", categoryCode, backupInterval);
         } catch (Exception e) {
             log.error("Unable to insert full backup record for category: {}", categoryCode, e);
             throw new DbBackupException("Error inserting full backup record for category: " + categoryCode, e);
@@ -163,22 +165,24 @@ public class BackupDaoService {
      *                    MONTHLY: YYYY-MM (e.g., "2026-03")
      *                    WEEKLY: YYYY-Www (e.g., "2026-W10")
      *                    CUSTOM: YYYY-MM-DD (e.g., "2026-03-05")
+     * @param backupInterval Backup frequency interval (e.g., "MONTHLY", "WEEKLY", "10_DAYS")
      * @throws DbBackupException if database operation fails
      */
     public void insertIncrementalBackupRecord(String batchId, String categoryCode, Date businessDate,
-                                              String backupMonth) {
-        log.info("Inserting incremental backup record with response for category: {}, base UUID: {}", categoryCode);
+                                              String backupMonth, String backupInterval) {
+        log.info("Inserting incremental backup record with response for category: {}, period: {}, interval: {}", categoryCode, backupMonth, backupInterval);
         Map<String, Object> param = new HashMap<>();
         try {
             param.put(AppConstants.BACKUP_BATCH_ID, batchId);
             param.put(AppConstants.CATEGORY, categoryCode);
             param.put(AppConstants.BUSINESS_DATE, new java.sql.Date(businessDate.getTime()));
             param.put(AppConstants.BACKUP_PERIOD, backupMonth);
+            param.put(AppConstants.BACKUP_INTERVAL, backupInterval);
             param.put(AppConstants.BACKUP_STATUS, AppConstants.BACKUP_INPROGRESS_STATUS);
 
 
             jdbcTemplate.update(insertIncrementalBackup, param);
-            log.info("Incremental backup record with response inserted successfully for category: {}", categoryCode);
+            log.info("Incremental backup record with response inserted successfully for category: {} with interval: {}", categoryCode, backupInterval);
         } catch (Exception e) {
             log.error("Unable to insert incremental backup record for category: {}", categoryCode, e);
             throw new DbBackupException("Error inserting incremental backup record for category: " + categoryCode, e);

@@ -105,7 +105,7 @@ class YbaClientTest {
                 .expectNextMatches(json -> json.contains("task-123"))
                 .verifyComplete();
 
-        verify(backupDaoService).insertFullBackupRecord(any(), anyString(), eq("task-123"), anyString(), anyString());
+        verify(backupDaoService).insertFullBackupRecord(any(), anyString(), anyString(), eq("task-123"), anyString(), anyString());
     }
 
 
@@ -131,7 +131,7 @@ class YbaClientTest {
                 .verifyComplete();
 
         verify(backupDaoService).insertIncrementalBackupRecord(
-                anyString(), anyString(), any(), anyString());
+                anyString(), anyString(), any(), anyString(), anyString());
     }
 
     @Test
