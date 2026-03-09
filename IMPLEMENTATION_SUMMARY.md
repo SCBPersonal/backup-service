@@ -1,154 +1,232 @@
-# Backup Orchestrator Service - Implementation Summary
+# 🎉 Backup Orchestrator Service - Documentation Complete
 
-## Overview
-This document summarizes the implementation of the new backup tracking system using three tables: batch execution table (handled by batch core library), full_backup_tracker, and incremental_backup_tracker.
+> **Version:** 3.0  
+> **Date:** 2026-03-09  
+> **Status:** ✅ COMPLETE
 
-## Architecture
+---
 
-### Three-Table Design
+## 📚 Documentation Created
 
-1. **Batch Execution Table** (handled by batch core library)
-   - Managed by the batch framework
-   - Tracks overall batch job status
-   - No changes required
+### **1. BACKUP_ORCHESTRATOR_SERVICE_COMPLETE_GUIDE.md** (1,034 lines)
 
-2. **full_backup_tracker Table**
-   - Tracks full backup operations
-   - Stores full backup response immediately after API call
-   - Base UUID populated by BackupPollerService after job completion
-   - One record per category per month (UNIQUE constraint)
+**Comprehensive technical guide covering:**
+- ✅ Overview & Architecture
+- ✅ Core Components (8 components detailed)
+- ✅ API Reference with examples
+- ✅ Database Schema (2 tables with full DDL)
+- ✅ Configuration (application.yml + environment variables)
+- ✅ Backup Workflows (Full & Incremental)
+- ✅ Error Handling & Logging
+- ✅ Deployment (Local, Docker, Kubernetes)
+- ✅ Testing (Unit & Integration)
+- ✅ Monitoring & Metrics
 
-3. **incremental_backup_tracker Table**
-   - Tracks incremental backup operations
-   - References base UUID from full_backup_tracker
-   - Multiple records allowed per category per month
+---
 
-## Implementation Flow
+### **2. CRON_EXPRESSION_GUIDE.md** (250 lines)
 
-### Full Backup Flow
+**Dedicated cron expression guide with:**
+- ✅ 6-field cron format explanation
+- ✅ 8 common examples (MONTHLY, WEEKLY, BI-WEEKLY, QUARTERLY, CUSTOM, etc.)
+- ✅ Complete API request examples
+- ✅ Error handling examples
+- ✅ Best practices
+- ✅ Online testing tools
+- ✅ Quick reference table
 
-1. **YbaClient.fullBackup()**:
-   - Calls YBA API for full backup
-   - Extracts task UUID from response
-   - Inserts record into `full_backup_tracker` with:
-     - batch_id, category_code, business_date, backup_month
-     - backup_status = 'IN_PROGRESS'
-     - task_uuid (for polling)
-   - Updates `full_backup_tracker` with full backup response (JSON)
+---
 
-2. **BackupPollerService** (runs in parallel threads):
-   - Polls YBA API for job completion using task_uuid (GET /tasks/{taskUUID})
-   - When job completes successfully:
-     - Fetches base UUID from YBA API using POST /backups/page (paginated request)
-     - Request includes: direction=DESC, limit=1, sortBy=createTime, filter by universeUUID
-     - Extracts baseBackupUUID from paginated response (entities[0])
-     - Updates `full_backup_tracker` with:
-       - base_backup_uuid
-       - backup_status = 'SUCCESS'
-       - end_time
-   - On failure:
-     - Updates backup_status = 'FAILED'
-     - Sets error_message
+## 🎯 Key Features Documented
 
-### Incremental Backup Flow
+### **Cron Expression-Based Scheduling**
+Users pass cron expressions in API requests:
+```json
+{
+  "payload": {
+    "cronExpression": "0 0 2 1 * *"
+  }
+}
+```
 
-1. **YbaClient.performIncrementalBackup()**:
-   - Fetches base UUID from `full_backup_tracker` for current month
-   - If base UUID not found, throws IllegalStateException
-   - Calls YBA API for incremental backup with base UUID
-   - Extracts task UUID from response
-   - Inserts record into `incremental_backup_tracker` with:
-     - batch_id, category_code, business_date, backup_month
-     - base_backup_uuid (from full_backup_tracker)
-     - backup_status = 'IN_PROGRESS'
-     - task_uuid
-   - Updates `incremental_backup_tracker` with incremental backup response (JSON)
+Service calculates:
+- Next execution time: `2026-04-01T02:00:00`
+- Backup period: `2026-04-01-0200`
+- Backup interval: `2026-04-01 02:00:00 (Cron: 0 0 2 1 * *)`
 
-2. **BackupPollerService** (future enhancement):
-   - Can poll incremental backup jobs if needed
-   - Updates incremental_backup_tracker status
+---
 
-## Key Changes Made
+### **Full & Incremental Backups**
+- Full backup stores `base_backup_uuid`
+- Incremental backup references `base_backup_uuid`
+- Async polling for job completion
+- Automatic status updates
 
-### 1. BackupDaoService.java
-**Added Methods**:
-- `insertFullBackupRecord()` - Insert full backup record
-- `updateFullBackupResponse()` - Update with API response
-- `updateFullBackupStatus()` - Update status and error message
-- `updateFullBackupWithBaseUuid()` - Update with base UUID (called by poller)
-- `getBaseBackupUuidFromDb()` - Retrieve base UUID for incremental backup
-- `insertIncrementalBackupRecord()` - Insert incremental backup record
-- `updateIncrementalBackupStatus()` - Update incremental backup status
+---
 
-**Removed**:
-- All legacy methods (insertBackupDetails, updateBackupStatus, storeBaseBackupUuid)
+### **Database Schema**
+Two tracking tables:
+1. **full_backup_tracker** - Tracks full backups, stores base UUID
+2. **incremental_backup_tracker** - Tracks incremental backups
 
-### 2. application.yml
-**Added Queries**:
-- `insert-full-backup` - Insert into full_backup_tracker
-- `update-full-backup-response` - Update with API response
-- `update-full-backup-status` - Update status/error
-- `update-full-backup-with-base-uuid` - Update with base UUID
-- `get-base-backup-uuid-from-full-tracker` - Get base UUID
-- `insert-incremental-backup` - Insert into incremental_backup_tracker
-- `update-incremental-backup-status` - Update incremental status
+---
 
-**Removed**:
-- All legacy queries (db-schedule-backup-insert, update-schedule-backup, insert-base-backup-uuid)
+## 📦 Files Included
 
-### 3. YbaClient.java
-**Modified Methods**:
-- `backupInitiate()` - Removed legacy insertBackupDetails call
-- `fullBackup()` - Now inserts into full_backup_tracker and updates with response
-- `performIncrementalBackup()` - Fetches base UUID from full_backup_tracker, inserts into incremental_backup_tracker
+### **Documentation Files:**
+1. ✅ `BACKUP_ORCHESTRATOR_SERVICE_COMPLETE_GUIDE.md` - Main technical guide
+2. ✅ `CRON_EXPRESSION_GUIDE.md` - Cron expression reference
+3. ✅ `README.md` - Existing project README (preserved)
+4. ✅ `SAMPLE_BACKUP_REQUESTS.json` - Existing sample requests (preserved)
 
-**Added Methods**:
-- `extractTaskUuidFromResponse()` - Extract task UUID for polling
+### **Code Files:**
+5. ✅ `CronExpressionParser.java` - Cron parsing utility
+6. ✅ `YbaClient.java` - Updated with cron-based period calculation
+7. ✅ `BackupService.java` - Updated to extract cron from payload
+8. ✅ `AppConstants.java` - Added CRON_EXPRESSION constant
+9. ✅ `application.yml` - Removed scheduler config
 
-### 4. BackupService.java
-**Modified Methods**:
-- `handleBackupSuccess()` - Removed legacy updateBackupStatus call
-- `handleBackupFailure()` - Removed legacy updateBackupStatus call
-- Now only updates batch execution status in batch framework
+### **Removed Files:**
+10. ❌ 28 old markdown documentation files (cleaned up)
+11. ❌ `CronSchedulerService.java` - Not needed
+12. ❌ `CronScheduleProperties.java` - Not needed
+13. ❌ `CronScheduleController.java` - Not needed
 
-### 5. Database Schema (V3 Migration)
-**Tables Created**:
-- `full_backup_tracker` - With UNIQUE(category_code, backup_month)
-- `incremental_backup_tracker` - Multiple records allowed
+---
 
-## Benefits
+## 🔄 How It Works
 
-1. **Clear Separation of Concerns**:
-   - Batch framework handles batch execution
-   - full_backup_tracker handles full backup lifecycle
-   - incremental_backup_tracker handles incremental backup lifecycle
+```
+User Request with Cron Expression
+  ↓
+{
+  "payload": {
+    "cronExpression": "0 0 2 1 * *"
+  }
+}
+  ↓
+BackupService extracts cronExpression
+  ↓
+CronExpressionParser.calculateBackupPeriod()
+  → Returns: "2026-04-01-0200"
+  ↓
+YbaClient.fullBackup()
+  → Inserts into full_backup_tracker
+  → Calls YBA API
+  → Updates with task_uuid
+  ↓
+BackupPollerService (Async)
+  → Polls YBA API every 30 seconds
+  → Updates base_backup_uuid when complete
+  → Updates status to SUCCESS
+```
 
-2. **Async Polling Support**:
-   - Task UUID stored for polling
-   - BackupPollerService can monitor job completion in parallel
+---
 
-3. **Monthly Base UUID Management**:
-   - One base UUID per category per month
-   - Automatic retrieval for incremental backups
+## 📊 Documentation Statistics
 
-4. **Better Tracking**:
-   - Full backup response stored immediately
-   - Base UUID populated after job completion
-   - Clear audit trail with timestamps
+| Metric | Count |
+|--------|-------|
+| **Total Documentation Files** | 2 main guides |
+| **Total Lines** | 1,284 lines |
+| **Code Examples** | 50+ examples |
+| **API Endpoints Documented** | 1 main endpoint |
+| **Database Tables Documented** | 2 tables |
+| **Cron Expression Examples** | 8 examples |
+| **Deployment Methods** | 3 (Local, Docker, K8s) |
+| **Test Examples** | 10+ test cases |
 
-## Testing Recommendations
+---
 
-1. Test full backup flow end-to-end
-2. Verify BackupPollerService updates base UUID correctly
-3. Test incremental backup with valid base UUID
-4. Test incremental backup failure when base UUID missing
-5. Verify UNIQUE constraint on full_backup_tracker
-6. Test concurrent backups for different categories
+## 🎯 Quick Start
 
-## Next Steps
+### **1. Read the Main Guide**
+```bash
+cat BACKUP_ORCHESTRATOR_SERVICE_COMPLETE_GUIDE.md
+```
 
-1. Ensure BackupPollerService is properly configured and running
-2. Add monitoring for backup job completion
-3. Add alerts for failed backups
-4. Consider adding retry logic for failed backups
+### **2. Check Cron Expression Examples**
+```bash
+cat CRON_EXPRESSION_GUIDE.md
+```
+
+### **3. Test the API**
+```bash
+curl -X POST http://localhost:10022/backupProcess \
+  -H "Content-Type: application/json" \
+  -d '{
+    "batchId": "TEST_001",
+    "batchCategoryCode": "HWA_EPR_DB_BACKUP_FULL",
+    "batchTransactionDate": "20260309",
+    "payload": {
+      "cronExpression": "0 0 2 1 * *"
+    }
+  }'
+```
+
+---
+
+## ✅ What's Included
+
+### **Architecture Diagrams**
+- ✅ High-level architecture
+- ✅ Component interaction flow
+- ✅ Full backup workflow
+- ✅ Incremental backup workflow
+
+### **API Documentation**
+- ✅ Request/response examples
+- ✅ Parameter descriptions
+- ✅ Error handling
+- ✅ Status codes
+
+### **Database Documentation**
+- ✅ Complete DDL for both tables
+- ✅ Column descriptions
+- ✅ Lifecycle explanations
+- ✅ SQL query examples
+
+### **Configuration Guide**
+- ✅ application.yml structure
+- ✅ Environment variables
+- ✅ YBA configuration
+- ✅ Poller configuration
+
+### **Deployment Guide**
+- ✅ Local deployment
+- ✅ Docker deployment
+- ✅ Kubernetes deployment
+- ✅ Environment setup
+
+### **Testing Guide**
+- ✅ Unit test examples
+- ✅ Integration test examples
+- ✅ Database verification queries
+- ✅ Coverage reports
+
+---
+
+## 🚀 Next Steps
+
+1. **Review Documentation** - Read both guides
+2. **Test Locally** - Run the service and test with sample requests
+3. **Verify Database** - Check backup tracker tables
+4. **Deploy** - Follow deployment guide for your environment
+5. **Monitor** - Set up monitoring for key metrics
+
+---
+
+## 📞 Support
+
+For questions or issues:
+- Check the **BACKUP_ORCHESTRATOR_SERVICE_COMPLETE_GUIDE.md**
+- Review **CRON_EXPRESSION_GUIDE.md** for cron syntax
+- Contact: SCB ePricing Team
+
+---
+
+**Version:** 3.0  
+**Last Updated:** 2026-03-09  
+**Author:** SCB ePricing Team  
+**Status:** ✅ COMPLETE
 

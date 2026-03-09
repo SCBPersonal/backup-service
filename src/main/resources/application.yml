@@ -87,50 +87,10 @@ backup:
     polling-interval-ms: ${BACKUP_POLLER_INTERVAL_MS:30000}
     thread-pool-size: ${BACKUP_POLLER_THREAD_POOL_SIZE:5}
 
-  # Backup Period Calculation Configuration
-  # This configuration defines how to calculate backup periods based on backup frequency
-  # The period calculation is done using simple date formatting patterns from YAML
-  # All logic is configuration-driven - no hardcoded Java classes needed!
-  #
-  # Supported backupFrequency values in requests:
-  #   - MONTHLY: Returns YYYY-MM (e.g., "2026-03")
-  #   - WEEKLY: Returns YYYY-Www (e.g., "2026-W11")
-  #   - N_DAYS: Returns YYYY-MM-DD (e.g., "10_DAYS" → "2026-03-11")
-  #
-  # Only 3 configurations needed - N_DAYS is dynamic!
-  period-calculation:
-    configs:
-      # MONTHLY: Returns current year-month (YYYY-MM)
-      # Request: "backupFrequency": "MONTHLY"
-      # Example result: 2026-03
-      MONTHLY:
-        format: "yyyy-MM"
-        description: "Monthly backup period - format: YYYY-MM"
-
-      # WEEKLY: Returns current ISO week (YYYY-Www)
-      # Request: "backupFrequency": "WEEKLY"
-      # Example result: 2026-W11
-      WEEKLY:
-        format: "yyyy-'W'ww"
-        description: "Weekly backup period - format: YYYY-Www (ISO week)"
-
-      # CUSTOM: Returns interval start date (YYYY-MM-DD)
-      # Used for all N_DAYS requests (10_DAYS, 15_DAYS, 20_DAYS, etc.)
-      # Request: "backupFrequency": "10_DAYS" or "15_DAYS" or "20_DAYS"
-      # Calculation: (days since epoch / N) * N
-      # Example: For 10_DAYS, March 15 (day 74) → 2026-03-11 (day 70)
-      CUSTOM:
-        format: "yyyy-MM-dd"
-        description: "Custom interval backup period - format: YYYY-MM-DD (dynamic)"
-        epoch-date: "2026-01-01"  # Reference date for interval calculation
-
 # Database Queries
-# Note: backup_period column stores backup period in different formats based on backup frequency:
-# Backup frequency is specified in the request payload (backupFrequency field)
-# Period formats:
-#   - MONTHLY: YYYY-MM (e.g., "2026-03")
-#   - WEEKLY: YYYY-Www (e.g., "2026-W11")
-#   - N_DAYS: YYYY-MM-DD (e.g., "10_DAYS" → "2026-03-11")
+# Note: backup_period column stores backup timestamp based on cron expression next execution
+# Format: YYYY-MM-DD-HHmm (e.g., "2026-04-01-0200" for April 1, 2026 at 2:00 AM)
+# The period is calculated from the cronExpression provided in the API request payload
 data:
   # Full Backup Table Queries
   insert-full-backup:

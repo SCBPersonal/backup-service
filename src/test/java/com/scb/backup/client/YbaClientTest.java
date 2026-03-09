@@ -2,7 +2,6 @@ package com.scb.backup.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.scb.backup.config.PeriodCalculationProperties;
 import com.scb.backup.model.YbaDynamicConfig;
 import com.scb.backup.service.BackupPollerService;
 import com.scb.backup.service.YbaConfigService;
@@ -23,6 +22,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doNothing;
 
 @ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
 class YbaClientTest {
@@ -43,15 +43,12 @@ class YbaClientTest {
     private BackupPollerService backupPollerService;
     @Mock
     private YbaConfigService configService;
-    @Mock
-    private PeriodCalculationProperties periodConfig;
 
     @InjectMocks
     private YbaClient ybaClient;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private YbaDynamicConfig config;
-    private PeriodCalculationProperties.PeriodConfig monthlyConfig;
 
     @BeforeEach
     void setup() {
@@ -65,25 +62,20 @@ class YbaClientTest {
         config.setUniverseUuid("universe-uuid");
         config.setBackupType("YQL_TABLE_TYPE");
 
-        // Setup period config
-        monthlyConfig = new PeriodCalculationProperties.PeriodConfig();
-        monthlyConfig.setFormat("yyyy-MM");
-        monthlyConfig.setDescription("Monthly backup period");
-
         lenient().when(webClient.post()).thenReturn(requestBodyUriSpec);
         lenient().when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodyUriSpec);
         lenient().when(requestBodyUriSpec.header(anyString(), anyString())).thenReturn(requestBodyUriSpec);
         lenient().when(requestBodyUriSpec.contentType(any())).thenReturn(requestBodyUriSpec);
         lenient().when(requestBodyUriSpec.bodyValue(any())).thenReturn(requestHeadersSpec);
         lenient().when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        lenient().when(periodConfig.getConfig(anyString())).thenReturn(monthlyConfig);
     }
 
     private Map<String, Object> createBatchParams() {
         Map<String, Object> map = new HashMap<>();
         map.put(AppConstants.BATCH_ID, "batch1");
+        map.put(AppConstants.CATEGORY_CODE, "FULL_BACKUP");
         map.put(AppConstants.BUSINESS_DATE, new Date());
-        map.put(AppConstants.BACKUP_FREQUENCY, "MONTHLY");  // Add backup frequency
+        map.put(AppConstants.CRON_EXPRESSION, "0 0 2 1 * *");  // Monthly: 1st of month at 2 AM
         return map;
     }
 
@@ -99,13 +91,18 @@ class YbaClientTest {
                 any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Mono.just("base-uuid"));
 
+        // Mock DAO method
+        doNothing().when(backupDaoService).insertFullBackupRecord(
+                any(), anyString(), anyString(), anyString(), anyString(), anyString());
+
         Mono<String> result = ybaClient.backupInitiate("FULL_BACKUP", createBatchParams());
 
         StepVerifier.create(result)
                 .expectNextMatches(json -> json.contains("task-123"))
                 .verifyComplete();
 
-        verify(backupDaoService).insertFullBackupRecord(any(), anyString(), anyString(), eq("task-123"), anyString(), anyString());
+        verify(backupDaoService).insertFullBackupRecord(
+                any(), anyString(), anyString(), eq("task-123"), anyString(), anyString());
     }
 
 
@@ -123,6 +120,10 @@ class YbaClientTest {
         when(backupPollerService.pollIncrementalBackupCompletion(
                 any(), anyString(), anyString(), anyString(), anyString(), anyString(),anyString()))
                 .thenReturn(Mono.empty());
+
+        // Mock DAO method
+        doNothing().when(backupDaoService).insertIncrementalBackupRecord(
+                anyString(), anyString(), any(), anyString(), anyString());
 
         Mono<String> result = ybaClient.backupInitiate("INC_BACKUP", createBatchParams());
 
@@ -166,13 +167,9 @@ class YbaClientTest {
     }
 
     @Test
-    void shouldHandleWeeklyBackupFrequency() throws Exception {
+    void shouldHandleWeeklyCronExpression() throws Exception {
         Map<String, Object> params = createBatchParams();
-        params.put(AppConstants.BACKUP_FREQUENCY, "WEEKLY");
-
-        PeriodCalculationProperties.PeriodConfig weeklyConfig = new PeriodCalculationProperties.PeriodConfig();
-        weeklyConfig.setFormat("yyyy-'W'ww");
-        when(periodConfig.getConfig("WEEKLY")).thenReturn(weeklyConfig);
+        params.put(AppConstants.CRON_EXPRESSION, "0 0 2 * * MON");  // Weekly: Every Monday at 2 AM
 
         JsonNode response = mapper.readTree("{\"taskUUID\":\"task-weekly\"}");
         when(configService.resolve(anyString())).thenReturn(config);
@@ -180,6 +177,10 @@ class YbaClientTest {
         when(backupPollerService.pollFullBackupCompletion(
                 any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Mono.just("base-uuid-weekly"));
+
+        // Mock DAO method
+        doNothing().when(backupDaoService).insertFullBackupRecord(
+                any(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         Mono<String> result = ybaClient.backupInitiate("FULL_BACKUP", params);
 
@@ -189,14 +190,9 @@ class YbaClientTest {
     }
 
     @Test
-    void shouldHandleCustomIntervalBackupFrequency() throws Exception {
+    void shouldHandleCustomDateCronExpression() throws Exception {
         Map<String, Object> params = createBatchParams();
-        params.put(AppConstants.BACKUP_FREQUENCY, "10_DAYS");
-
-        PeriodCalculationProperties.PeriodConfig customConfig = new PeriodCalculationProperties.PeriodConfig();
-        customConfig.setFormat("yyyy-MM-dd");
-        customConfig.setEpochDate("2026-01-01");
-        when(periodConfig.getConfig("CUSTOM")).thenReturn(customConfig);
+        params.put(AppConstants.CRON_EXPRESSION, "0 0 3 15 6 *");  // Custom: June 15 at 3 AM
 
         JsonNode response = mapper.readTree("{\"taskUUID\":\"task-custom\"}");
         when(configService.resolve(anyString())).thenReturn(config);
@@ -204,6 +200,10 @@ class YbaClientTest {
         when(backupPollerService.pollFullBackupCompletion(
                 any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Mono.just("base-uuid-custom"));
+
+        // Mock DAO method
+        doNothing().when(backupDaoService).insertFullBackupRecord(
+                any(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         Mono<String> result = ybaClient.backupInitiate("FULL_BACKUP", params);
 
@@ -213,15 +213,11 @@ class YbaClientTest {
     }
 
     @Test
-    void shouldHandleIncrementalBackupWithWeeklyFrequency() throws Exception {
+    void shouldHandleIncrementalBackupWithWeeklyCron() throws Exception {
         config.setBackupCategoryType(AppConstants.INCREMENTAL_BACKUP);
 
         Map<String, Object> params = createBatchParams();
-        params.put(AppConstants.BACKUP_FREQUENCY, "WEEKLY");
-
-        PeriodCalculationProperties.PeriodConfig weeklyConfig = new PeriodCalculationProperties.PeriodConfig();
-        weeklyConfig.setFormat("yyyy-'W'ww");
-        when(periodConfig.getConfig("WEEKLY")).thenReturn(weeklyConfig);
+        params.put(AppConstants.CRON_EXPRESSION, "0 0 2 * * MON");  // Weekly: Every Monday at 2 AM
 
         JsonNode response = mapper.readTree("{\"taskUUID\":\"task-inc-weekly\"}");
         when(configService.resolve(anyString())).thenReturn(config);
@@ -232,6 +228,10 @@ class YbaClientTest {
                 any(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Mono.empty());
 
+        // Mock DAO method
+        doNothing().when(backupDaoService).insertIncrementalBackupRecord(
+                anyString(), anyString(), any(), anyString(), anyString());
+
         Mono<String> result = ybaClient.backupInitiate("INC_BACKUP", params);
 
         StepVerifier.create(result)
@@ -240,21 +240,20 @@ class YbaClientTest {
     }
 
     @Test
-    void shouldHandleNullBackupFrequency() throws Exception {
+    void shouldHandleMissingCronExpression() throws Exception {
         Map<String, Object> params = createBatchParams();
-        params.put(AppConstants.BACKUP_FREQUENCY, null);  // Null backup frequency
+        params.remove(AppConstants.CRON_EXPRESSION);  // Remove cron expression
 
-        // When backup frequency is null, it might cause an error
-        // This test documents the behavior
+        // When cron expression is missing, it should throw an error
         when(configService.resolve(anyString())).thenReturn(config);
 
         Mono<String> result = ybaClient.backupInitiate("FULL_BACKUP", params);
 
-        // Expect either success or error depending on implementation
+        // Expect error when cron expression is missing
         StepVerifier.create(result)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof NullPointerException ||
-                        throwable instanceof IllegalArgumentException)
+                        throwable instanceof IllegalArgumentException &&
+                        throwable.getMessage().contains("cronExpression is required"))
                 .verify();
     }
 
@@ -276,7 +275,6 @@ class YbaClientTest {
         config.setBackupCategoryType(AppConstants.INCREMENTAL_BACKUP);
 
         when(configService.resolve(anyString())).thenReturn(config);
-        when(periodConfig.getConfig(anyString())).thenReturn(monthlyConfig);
 
         // Mock the DAO to return empty string for base UUID
         when(backupDaoService.getBaseBackupUuidFromDb(anyString(), anyString()))
@@ -288,6 +286,23 @@ class YbaClientTest {
                 .expectErrorMatches(throwable ->
                         throwable instanceof IllegalStateException &&
                         throwable.getMessage().contains("Base backup UUID not found"))
+                .verify();
+    }
+
+    @Test
+    void shouldHandleInvalidCronExpression() {
+        Map<String, Object> params = createBatchParams();
+        params.put(AppConstants.CRON_EXPRESSION, "INVALID_CRON");  // Invalid cron expression
+
+        when(configService.resolve(anyString())).thenReturn(config);
+
+        Mono<String> result = ybaClient.backupInitiate("FULL_BACKUP", params);
+
+        // Expect error when cron expression is invalid
+        StepVerifier.create(result)
+                .expectErrorMatches(throwable ->
+                        throwable instanceof IllegalArgumentException &&
+                        throwable.getMessage().contains("Invalid cron expression"))
                 .verify();
     }
 }

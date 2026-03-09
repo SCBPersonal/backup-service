@@ -4,13 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.scb.backup.config.PeriodCalculationProperties;
 import com.scb.backup.dao.BackupDaoService;
 import com.scb.backup.model.YbaDynamicConfig;
 import com.scb.backup.service.BackupPollerService;
 import com.scb.backup.service.YbaConfigService;
 import com.scb.backup.utils.AppConstants;
-import com.scb.backup.utils.PeriodCalculator;
+import com.scb.backup.utils.CronExpressionParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -25,25 +24,22 @@ import java.util.Map;
  * YbaClient - HTTP client for YugabyteDB Anywhere (YBA) API integration.
  *
  * This client handles backup operations including full and incremental backups.
- * It manages base backup UUID storage and retrieval based on configurable backup frequency
- * (monthly, weekly, or custom intervals).
+ * Uses cron expression-based period tracking for backup identification.
  *
  * @author SCB ePricing Team
- * @version 2.0
- * @since 2026-02-04
+ * @version 3.0
+ * @since 2026-03-09
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class YbaClient {
 
-
     private final WebClient webClient;
     private final BackupDaoService backupDaoService;
     private final BackupPollerService backupPollerService;
     private final ObjectMapper mapper = new ObjectMapper();
     private final YbaConfigService configService;
-    private final PeriodCalculationProperties periodConfig;
 
 
     /**
@@ -141,118 +137,63 @@ public class YbaClient {
     }
 
     /**
-     * Gets the current backup period identifier for matching base backups.
-     *
-     * This method calculates a simple period identifier used for matching incremental backups
-     * to their base full backup. Returns formats like "2026-03", "2026-W11", "2026-01-01".
-     *
-     * Supported values and their formats:
-     * - MONTHLY: Returns "YYYY-MM" (e.g., "2026-03")
-     * - WEEKLY: Returns "YYYY-Www" (e.g., "2026-W11")
-     * - N_DAYS: Returns "YYYY-MM-DD" (e.g., "10_DAYS" → "2026-01-01")
+     * Gets the backup period identifier from cron expression.
+     * Format: YYYY-MM-DD-HHmm based on next execution time from cron.
      *
      * @param categoryCode The backup category code
-     * @param batchParams Batch parameters containing backupFrequency
+     * @param batchParams Batch parameters containing cronExpression
      * @return String representing the backup period identifier
-     * @throws IllegalArgumentException if backupFrequency is not provided or invalid
+     * @throws IllegalArgumentException if cronExpression is missing or invalid
      */
     private String getBackupPeriod(String categoryCode, Map<String, Object> batchParams) {
-        // Get backup frequency from request payload (REQUIRED)
-        String backupFrequency = (String) batchParams.get(AppConstants.BACKUP_FREQUENCY);
+        // Get cron expression from request payload (REQUIRED)
+        String cronExpression = (String) batchParams.get(AppConstants.CRON_EXPRESSION);
 
-        if (backupFrequency == null || backupFrequency.trim().isEmpty()) {
+        if (cronExpression == null || cronExpression.trim().isEmpty()) {
             String errorMsg = String.format(
-                "backupFrequency is required in the request payload for category: %s. " +
-                "Please specify one of: MONTHLY, WEEKLY, or N_DAYS (e.g., 10_DAYS, 15_DAYS)",
+                "cronExpression is required in the request payload for category: %s. " +
+                "Examples: '0 0 2 1 * *' (monthly), '0 0 2 * * MON' (weekly), '0 0 3 15 6 *' (custom date)",
                 categoryCode
             );
             log.error(errorMsg);
             throw new IllegalArgumentException(errorMsg);
         }
 
-        // Determine which YAML config to use (for epoch date)
-        String configKey;
-        if (backupFrequency.endsWith("_DAYS")) {
-            configKey = "CUSTOM";  // All N_DAYS formats use CUSTOM config
-        } else {
-            configKey = backupFrequency;  // MONTHLY or WEEKLY
-        }
+        // Validate and calculate period from cron expression
+        String period = CronExpressionParser.calculateBackupPeriod(cronExpression);
 
-        // Get period configuration from YAML
-        PeriodCalculationProperties.PeriodConfig config = periodConfig.getConfig(configKey);
-        if (config == null) {
-            String errorMsg = String.format(
-                "Invalid backupFrequency: %s. Must be one of: MONTHLY, WEEKLY, or N_DAYS (e.g., 10_DAYS)",
-                backupFrequency
-            );
-            log.error(errorMsg);
-            throw new IllegalArgumentException(errorMsg);
-        }
-
-        // Calculate period identifier (simple format for matching)
-        String periodIdentifier = PeriodCalculator.calculatePeriod(
-            backupFrequency,
-            config.getFormat(),
-            config.getEpochDate()
-        );
-
-        log.info("Calculated backup period identifier: {} for category: {} with backup frequency: {}",
-                periodIdentifier, categoryCode, backupFrequency);
-        return periodIdentifier;
+        log.info("Calculated backup period: {} for category: {} with cron: {}",
+            period, categoryCode, cronExpression);
+        return period;
     }
 
     /**
-     * Gets the current backup interval (date range) for audit trail.
-     *
-     * This method calculates the actual date range covered by the backup period.
-     * Returns date range strings like "2026-01-01 to 2026-01-31" for audit and reporting.
-     *
-     * Supported values and their ranges:
-     * - MONTHLY: Returns "YYYY-MM-DD to YYYY-MM-DD" (e.g., "2026-01-01 to 2026-01-31")
-     * - WEEKLY: Returns "YYYY-MM-DD to YYYY-MM-DD" (e.g., "2026-01-06 to 2026-01-12")
-     * - N_DAYS: Returns "YYYY-MM-DD to YYYY-MM-DD" (e.g., "10_DAYS" → "2026-01-01 to 2026-01-10")
+     * Gets the backup interval (human-readable) from cron expression.
      *
      * @param categoryCode The backup category code
-     * @param batchParams Batch parameters containing backupFrequency
-     * @return String representing the backup date range
-     * @throws IllegalArgumentException if backupFrequency is not provided or invalid
+     * @param batchParams Batch parameters containing cronExpression
+     * @return String representing the backup interval
+     * @throws IllegalArgumentException if cronExpression is missing or invalid
      */
     private String getBackupInterval(String categoryCode, Map<String, Object> batchParams) {
-        // Get backup frequency from request payload (REQUIRED)
-        String backupFrequency = (String) batchParams.get(AppConstants.BACKUP_FREQUENCY);
+        // Get cron expression from request payload (REQUIRED)
+        String cronExpression = (String) batchParams.get(AppConstants.CRON_EXPRESSION);
 
-        if (backupFrequency == null || backupFrequency.trim().isEmpty()) {
+        if (cronExpression == null || cronExpression.trim().isEmpty()) {
             String errorMsg = String.format(
-                "backupFrequency is required in the request payload for category: %s",
+                "cronExpression is required in the request payload for category: %s",
                 categoryCode
             );
             log.error(errorMsg);
             throw new IllegalArgumentException(errorMsg);
         }
 
-        // Determine which YAML config to use (for epoch date)
-        String configKey;
-        if (backupFrequency.endsWith("_DAYS")) {
-            configKey = "CUSTOM";
-        } else {
-            configKey = backupFrequency;
-        }
+        // Calculate interval from cron expression
+        String interval = CronExpressionParser.calculateBackupInterval(cronExpression);
 
-        // Get period configuration from YAML
-        PeriodCalculationProperties.PeriodConfig config = periodConfig.getConfig(configKey);
-        if (config == null) {
-            throw new IllegalArgumentException("Invalid backupFrequency: " + backupFrequency);
-        }
-
-        // Calculate period range (date range for audit trail)
-        String periodRange = PeriodCalculator.calculatePeriodRange(
-            backupFrequency,
-            config.getEpochDate()
-        );
-
-        log.info("Calculated backup interval (date range): {} for category: {} with backup frequency: {}",
-                periodRange, categoryCode, backupFrequency);
-        return periodRange;
+        log.info("Calculated backup interval: {} for category: {} with cron: {}",
+            interval, categoryCode, cronExpression);
+        return interval;
     }
 
     /**

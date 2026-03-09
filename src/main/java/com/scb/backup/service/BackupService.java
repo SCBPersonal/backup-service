@@ -91,12 +91,12 @@ public class BackupService extends GenericBatchService {
             String batchCategoryCode= (String) batchParams.get(AppConstants.CATEGORY_CODE);
             String businessDate = extractBusinessDate(batchId, batchCategoryCode);
 
-            // Extract backup frequency from payload
-            String backupFrequency = (String) JPathUtils.get(payload, "$.backupFrequency");
+            // Extract cron expression from payload
+            String cronExpression = (String) JPathUtils.get(payload,AppConstants.CRON_EXPRESSION );
 
-            // Add backup frequency to batchParams
-            if (backupFrequency != null) {
-                batchParams.put(AppConstants.BACKUP_FREQUENCY, backupFrequency);
+            // Add cron expression to batchParams
+            if (cronExpression != null) {
+                batchParams.put(AppConstants.CRON_EXPRESSION, cronExpression);
             }
 
             processBackup(batchId, businessDate, subCategoryCode)

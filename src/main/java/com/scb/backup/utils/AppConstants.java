@@ -29,6 +29,7 @@ public class AppConstants {
     public static final String BUSINESS_DATE = "businessDate";
     public static final String CATEGORY_CODE = "batchCategoryCode";
     public static final String SUB_CATEGORY_CODE = "$.batchCategoryParameters.subCategoryCode";
+    public static final String CRON_JOB_EXPRESSION = "$.batchCategoryParameters.cronExpression";
     public static final String BACKUP_POLLING_STATUS = "Success";
     public static final String UNKNOWN_STATUS = "Unknown";
     public static final String STATUS = "status";
@@ -60,5 +61,5 @@ public class AppConstants {
     public static final String KEYSPACE = "keyspace";
     public static final String KEYSPACE_TABLE_LIST = "keyspaceTableList";
     public static final String DATABASE_NAME = "dbName";
-    public static final String BACKUP_FREQUENCY = "backupFrequency";
+    public static final String CRON_EXPRESSION = "cronExpression";
 }

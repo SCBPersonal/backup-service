@@ -76,7 +76,7 @@ public class BackupController {
                 stopWatch.start();
                 var response = backupService.execute(json);
                 stopWatch.stop();
-                log.info("Completion time - {} sec");
+                log.info("Completion time - {} sec", stopWatch.getTotalTimeSeconds());
                 return response;
             } catch (Exception e) {
                 log.error("Error occurred during file Transfer : ", e);
