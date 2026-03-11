@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avinash Kumar - CV</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Calibri', 'Arial', sans-serif;
+            font-size: 9pt;
+            line-height: 1.25;
+            color: #333;
+            padding: 0.3in 0.4in 0.15in 0.4in;
+            max-width: 8.27in;
+            margin: 0 auto;
+        }
+        .header { text-align: center; margin-bottom: 6px; }
+        .header h1 { font-size: 20pt; color: #1a5490; margin-bottom: 3px; }
+        .header .contact { font-size: 9pt; color: #555; }
+        .header .contact span { margin: 0 6px; }
+        .header .contact a { color: #1a5490; text-decoration: none; }
+        h2 {
+            font-size: 11pt;
+            color: #1a5490;
+            border-bottom: 1.5px solid #1a5490;
+            padding-bottom: 1px;
+            margin-top: 6px;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+        }
+        .section { margin-bottom: 5px; }
+        .job-title { font-weight: bold; margin-top: 3px; font-size: 9pt; }
+        .company { font-style: italic; font-size: 8.5pt; }
+        .date { float: right; font-style: italic; color: #666; font-size: 8.5pt; }
+        ul { margin-left: 16px; margin-top: 2px; margin-bottom: 1px; }
+        li { margin-bottom: 1px; font-size: 8.5pt; line-height: 1.2; }
+        .skills-grid { display: grid; grid-template-columns: 1fr; gap: 1px; }
+        .skills-grid div { font-size: 8.5pt; line-height: 1.25; }
+        .objective { text-align: justify; margin-bottom: 4px; font-size: 9pt; }
+        strong { color: #1a5490; }
+        a { color: #1a5490; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        @media print {
+            body { padding: 0.3in 0.4in 0.1in 0.4in; font-size: 9.5pt; line-height: 1.3; }
+            @page { margin: 0; size: A4; }
+            .header { margin-bottom: 6px; }
+            .header h1 { font-size: 22pt; margin-bottom: 4px; }
+            .header .contact { font-size: 9.5pt; }
+            h2 { font-size: 11pt; margin-top: 6px; margin-bottom: 4px; padding-bottom: 1.5px; }
+            .section { margin-bottom: 6px; }
+            .job-title { font-size: 9.5pt; margin-top: 4px; }
+            .company { font-size: 9pt; }
+            .date { font-size: 9pt; }
+            li { font-size: 9pt; line-height: 1.25; margin-bottom: 1.5px; }
+            ul { margin-top: 2px; margin-bottom: 1px; margin-left: 16px; }
+            .skills-grid div { font-size: 9pt; line-height: 1.3; }
+            .objective { font-size: 9.5pt; margin-bottom: 5px; }
+            .section:last-child { margin-bottom: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AVINASH KUMAR</h1>
+        <div class="contact">
+            <a href="tel:+919161484826">+91 9161484826</a> |
+            <a href="mailto:avinash.kumar.cse14@itbhu.ac.in">avinash.kumar.cse14@itbhu.ac.in</a> |
+            <a href="https://www.linkedin.com/in/avinash-kumar-1st-449b70113" target="_blank">linkedin.com/in/avinash-kumar-1st-449b70113</a> |
+            Bengaluru, India
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Professional Summary</h2>
+        <p class="objective">Senior Software Engineer with 7+ years in software development, system design, and cloud architecture. Expert in Java, Spring Boot, microservices, AWS, GCP, Kafka, and distributed systems. Delivered high-performance applications (7K+ TPS) in banking and financial services with strong focus on API development, database optimization, and CI/CD.</p>
+    </div>
+
+    <div class="section">
+        <h2>Education</h2>
+        <div>
+            <span class="job-title">Indian Institute of Technology (IIT BHU), Varanasi</span>
+            <span class="date">July 2014 – May 2018</span><br>
+            B.Tech in Computer Science and Engineering
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Technical Skills</h2>
+        <div class="skills-grid">
+            <div><strong>Languages:</strong> Java (8/11/17), Python, C++, SQL</div>
+            <div><strong>Frameworks:</strong> Spring Boot, Spring WebFlux, Spring Batch, Apache Camel</div>
+            <div><strong>Cloud & DevOps:</strong> AWS (EKS, EC2, S3), GCP (GKE), Azure, Kubernetes, Docker, Jenkins</div>
+            <div><strong>Databases:</strong> YugabyteDB, PostgreSQL, MySQL, Cassandra, Elasticsearch</div>
+            <div><strong>Messaging:</strong> Kafka, Event-Driven Architecture</div>
+            <div><strong>Monitoring:</strong> Grafana, Prometheus, ELK</div>
+            <div><strong>AI Tools:</strong> OpenAI API, Grok API, GitHub Copilot, ChatGPT, Augment AI</div>
+            <div><strong>Architecture:</strong> Microservices, Event-Driven, DDD, CQRS, Circuit Breaker, Saga Pattern</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Professional Experience</h2>
+        
+        <div>
+            <span class="job-title">Senior Software Engineer (Senior Manager)</span>
+            <span class="date">May 2022 – Present</span><br>
+            <span class="company">HDFC Bank, Bangalore, India</span>
+            <ul>
+                <li><strong>YugabyteDB Backup Orchestrator:</strong> Architected distributed backup automation using Spring Boot reactive, cron-based scheduling, async polling, and dual-tracker architecture. Achieved 99.99% success rate, 65% storage cost reduction, RPO 15min, 90% less manual intervention.</li>
+                <li><strong>AI-Powered Development:</strong> Integrated OpenAI API (GPT-4), Grok API, GitHub Copilot, and Augment AI for intelligent automation. Accelerated development by 35%, automated test generation (80% coverage), built AI code review tools and LLM-powered NLP features.</li>
+                <li><strong>Headless Liability Journey:</strong> Architected reactive microservices achieving 7K TPS, <200ms p99 latency using Spring WebFlux, Kafka, Temporal, AWS EKS. Reduced account opening from 48hrs to 15min (85% satisfaction improvement).</li>
+                <li><strong>Cloud File Transfer Framework:</strong> Built SFTP ↔ Multi-Cloud (GCP/AWS/Azure) platform using Spring Integration, processing 20GB+ files daily, 99.9% uptime, 60% faster deployment.</li>
+                <li><strong>Data Masking Engine:</strong> Engineered high-throughput masking using Java NIO, multi-threading achieving 10M+ records/hour, 100% PII protection for 50M+ customers.</li>
+                <li><strong>Integration Layer Adapter:</strong> Created JSON/XML/SWIFT transformation framework using MVEL, reducing integration time by 70%, eliminating 95% mapping errors across 15+ systems.</li>
+            </ul>
+        </div>
+
+        <div style="margin-top: 8px;">
+            <span class="job-title">Software Development Architect</span>
+            <span class="date">July 2018 – May 2022</span><br>
+            <span class="company">Standard Chartered Bank (GBS), Bangalore, India</span>
+            <ul>
+                <li><strong>SWIFT Payment Parser:</strong> Built high-performance parser for MT103/MT102/MT202 processing 100K+ RTGS/IBFT transactions daily across 5 countries. Achieved 99.99% accuracy, reduced payment failures by 85%.</li>
+                <li><strong>RTGS Payments Framework:</strong> Architected microservices (Batch Reader, Processor, Router, Adapter) handling $2B+ daily volume. Implemented Kafka event-driven architecture, reduced processing time by 60%.</li>
+                <li><strong>Data Quality Platform:</strong> Deployed universal parser for SWIFT/JSON/IFX/XML across 10+ countries. Improved accuracy from 92% to 99.7%, prevented $50M+ compliance penalties.</li>
+                <li><strong>Retry & Duplicate Detection:</strong> Built ML-powered duplicate detection with automated alerts, preventing 99.8% duplicates. Improved success rate from 94% to 99.5% using circuit breakers.</li>
+                <li><strong>Cross-Border Payments:</strong> Led orchestration platform with 20+ external systems. Reduced settlement from 3 days to 4 hours, processing 50K+ transactions daily.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Academic Projects & Research</h2>
+        <ul>
+            <li><strong>NLP Machine Translation System:</strong> Built English-Hindi translator using Python, POS Tagger, Tokenizer achieving 78% BLEU score accuracy</li>
+            <li><strong>ML Crop Yield Prediction:</strong> Developed prediction model using Python, SVM, Random Forest with 85% accuracy on 50K+ satellite data points</li>
+            <li><strong>Distributed Task Scheduler:</strong> Implemented Round Robin, Least Connection algorithms in C++ with 40% performance improvement</li>
+            <li><strong>ML Boilerplate Detection:</strong> Created content extraction system using Scikit-learn, Pandas achieving 92% precision on 100K+ web pages</li>
+            <li><strong>Custom SQL Query Engine:</strong> Built parser and executor in C++ supporting SELECT, JOIN, WHERE, GROUP BY with query optimization</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Achievements & Leadership</h2>
+        <ul>
+            <li><strong>Best Performance Award (4x):</strong> 2019, 2020, 2021, 2023 for exceeding targets by 150%+</li>
+            <li><strong>Technical Leadership:</strong> Mentored 10+ engineers, 50+ code reviews, established best practices across 5 teams</li>
+            <li><strong>Cost Optimization:</strong> Reduced cloud costs by 40% ($200K+ annual savings)</li>
+            <li><strong>Hackathon 2nd Runner-Up (2019):</strong> Face Recognition & Emotion Detection using Python, OpenCV, TensorFlow</li>
+            <li><strong>IIT JEE Advanced:</strong> AIR 2,081 (Top 1.4%) | <strong>IIT JEE Main:</strong> AIR <100 (Top 0.008%) | <strong>UPTU:</strong> State Rank <10</li>
+            <li><strong>Competitive Programming:</strong> HackerRank 5⭐ Java, CodeChef 3⭐, 500+ problems solved</li>
+        </ul>
+    </div>
+
+
+
+</body>
+</html>
+
